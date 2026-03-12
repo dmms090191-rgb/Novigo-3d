@@ -183,7 +183,7 @@ function App() {
   }, [admins]);
 
 
-  const handleLogin = (email: string, password: string) => {
+  const handleLogin = async (email: string, password: string): Promise<boolean> => {
     const sellerIndex = sellers.findIndex(
       s => s.email === email && s.motDePasse === password
     );
@@ -202,29 +202,22 @@ function App() {
       return true;
     }
 
-    const adminIndex = admins.findIndex(
-      a => a.email === email && a.motDePasse === password
-    );
-
-    if (adminIndex !== -1) {
-      const updatedAdmin = {
-        ...admins[adminIndex],
-        isOnline: true,
-        lastConnection: new Date().toISOString()
-      };
-      const updatedAdmins = [...admins];
-      updatedAdmins[adminIndex] = updatedAdmin;
-      setAdmins(updatedAdmins);
-      const adminUser = {
-        id: updatedAdmin.id,
-        email: updatedAdmin.email,
-        type: 'admin' as const
-      };
-      setIsLoggedIn(true);
-      setUser(adminUser);
-      sessionStorage.setItem('isAdminLoggedIn', 'true');
-      sessionStorage.setItem('adminUser', JSON.stringify(adminUser));
-      return true;
+    try {
+      const result = await adminService.verifyAdminLogin(email, password);
+      if (result.success && result.admin) {
+        const adminUser = {
+          id: result.admin.id,
+          email: result.admin.email,
+          type: 'admin' as const
+        };
+        setIsLoggedIn(true);
+        setUser(adminUser);
+        sessionStorage.setItem('isAdminLoggedIn', 'true');
+        sessionStorage.setItem('adminUser', JSON.stringify(adminUser));
+        return true;
+      }
+    } catch (error) {
+      console.error('Erreur lors de la vérification admin:', error);
     }
 
     if (email === 'dmms090191@gmail.com' && password === '000000') {
@@ -649,7 +642,7 @@ function App() {
               isLoggedIn && user?.type === 'admin' ? (
                 <Navigate to="/" replace />
               ) : (
-                <AdminLogin admins={admins} onLoginSuccess={handleLogin} />
+                <AdminLogin onLoginSuccess={handleLogin} />
               )
             }
           />

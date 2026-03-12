@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import LeadManager from './LeadManager';
 import RegistrationManager from './RegistrationManager';
 import BulkImport from './BulkImport';
@@ -9,11 +9,15 @@ import LeadsTab from './LeadsTab';
 import AllAccountsList from './AllAccountsList';
 import AdminChatViewer from './AdminChatViewer';
 import StatusManager from './StatusManager';
+import Plan from '../pages/Plan';
+import InteractiveDrawing from '../pages/InteractiveDrawing';
+import ElementsManager from './ElementsManager';
 import { User } from '../types/User';
 import { Lead } from '../types/Lead';
 import { Registration } from '../types/Registration';
 import { Seller } from '../types/Seller';
 import { Admin } from '../types/Admin';
+import { supabase } from '../lib/supabase';
 import {
   Bell,
   Settings,
@@ -30,7 +34,10 @@ import {
   ChevronDown,
   Home,
   BarChart3,
-  HelpCircle
+  HelpCircle,
+  PenTool,
+  Pencil,
+  Layers
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -64,7 +71,7 @@ interface DashboardProps {
   onStatusChanged?: (leadId: string, statusId: string | null) => void;
 }
 
-type TabId = 'overview' | 'bulk-import' | 'leads-tab' | 'leads' | 'registrations' | 'sellers' | 'admin-info' | 'users-monitor' | 'chat' | 'all-accounts' | 'statuses';
+type TabId = 'overview' | 'bulk-import' | 'leads-tab' | 'leads' | 'registrations' | 'sellers' | 'admin-info' | 'users-monitor' | 'chat' | 'all-accounts' | 'statuses' | 'plan-editor' | 'interactive-drawing' | 'elements';
 
 interface MenuItem {
   id: TabId;
@@ -80,8 +87,48 @@ const Dashboard: React.FC<DashboardProps> = ({
   registrations, onApproveRegistration, onRejectRegistration,
   sellers, onSellerCreated, onSellersDeleted, admins, onClientLogin, onSellerLogin, onStatusChanged
 }) => {
-  const [activeTab, setActiveTab] = React.useState<TabId>('overview');
-  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
+  const [activeTab, setActiveTab] = useState<TabId>('overview');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [adminFirstName, setAdminFirstName] = useState('');
+  const [adminLastName, setAdminLastName] = useState('');
+
+  useEffect(() => {
+    const loadAdminName = async () => {
+      if (!supabase || !user?.email) return;
+      try {
+        const { data } = await supabase
+          .from('admins')
+          .select('first_name, last_name')
+          .eq('email', user.email)
+          .maybeSingle();
+        if (data) {
+          setAdminFirstName(data.first_name || '');
+          setAdminLastName(data.last_name || '');
+        }
+      } catch (error) {
+        console.error('Error loading admin name:', error);
+      }
+    };
+    loadAdminName();
+
+    const channel = supabase?.channel('admin-name-changes')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'admins',
+        filter: `email=eq.${user?.email}`
+      }, (payload) => {
+        if (payload.new) {
+          setAdminFirstName(payload.new.first_name || '');
+          setAdminLastName(payload.new.last_name || '');
+        }
+      })
+      .subscribe();
+
+    return () => {
+      channel?.unsubscribe();
+    };
+  }, [user?.email]);
 
   const pendingRegistrations = registrations.filter(reg => reg.statut === 'en_attente');
 
@@ -115,6 +162,14 @@ const Dashboard: React.FC<DashboardProps> = ({
       ]
     },
     {
+      title: 'Outils',
+      items: [
+        { id: 'plan-editor', label: 'Editeur de plan', icon: PenTool },
+        { id: 'interactive-drawing', label: 'Dessin interactif', icon: Pencil },
+        { id: 'elements', label: 'Elements', icon: Layers },
+      ]
+    },
+    {
       title: 'Configuration',
       items: [
         { id: 'statuses', label: 'Statuts', icon: Tag },
@@ -140,8 +195,16 @@ const Dashboard: React.FC<DashboardProps> = ({
     return 'Dashboard';
   };
 
-  const userName = user?.email?.split('@')[0] || 'Admin';
-  const userInitials = userName.slice(0, 2).toUpperCase();
+  const getInitials = () => {
+    if (adminFirstName && adminLastName) {
+      return `${adminFirstName.charAt(0)}${adminLastName.charAt(0)}`.toUpperCase();
+    }
+    if (adminFirstName) {
+      return adminFirstName.slice(0, 2).toUpperCase();
+    }
+    return user?.email?.split('@')[0]?.slice(0, 2).toUpperCase() || 'AD';
+  };
+  const userInitials = getInitials();
 
   return (
     <div className="min-h-screen bg-[#071018] flex">
@@ -224,20 +287,10 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       <aside className={`fixed top-0 left-0 h-full bg-[#0a1929]/90 backdrop-blur-xl border-r border-cyan-600/20 z-50 transition-all duration-300 ${sidebarCollapsed ? 'w-20' : 'w-72'}`}>
         <div className="flex flex-col h-full">
-          <div className="h-20 flex items-center justify-center px-4 border-b border-cyan-600/20">
-            {!sidebarCollapsed && (
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-12 h-12 rounded-full bg-[#071018] border-2 border-cyan-500/50 flex items-center justify-center shadow-[0_0_15px_rgba(34,211,238,0.2)]">
-                  <Home className="w-6 h-6 text-cyan-400" />
-                </div>
-                <span className="font-bold text-cyan-300 text-sm tracking-wider uppercase">CRM Pro</span>
-              </div>
-            )}
-            {sidebarCollapsed && (
-              <div className="w-12 h-12 rounded-full bg-[#071018] border-2 border-cyan-500/50 flex items-center justify-center shadow-[0_0_15px_rgba(34,211,238,0.2)]">
-                <Home className="w-6 h-6 text-cyan-400" />
-              </div>
-            )}
+          <div className="h-16 border-b border-cyan-600/20 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center shadow-lg shadow-cyan-500/30">
+              <Home className="w-6 h-6 text-white" />
+            </div>
           </div>
 
           <nav className="flex-1 overflow-y-auto py-6">
@@ -339,7 +392,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   <span className="text-sm font-bold text-cyan-300">{userInitials}</span>
                 </div>
                 <div className="hidden lg:block">
-                  <p className="text-sm font-semibold text-cyan-200">{userName}</p>
+                  <p className="text-sm font-semibold text-cyan-200">{userInitials}</p>
                   <p className="text-[10px] text-cyan-500/50 uppercase tracking-wider">Administrateur</p>
                 </div>
               </div>
@@ -526,6 +579,22 @@ const Dashboard: React.FC<DashboardProps> = ({
 
           {activeTab === 'statuses' && (
             <StatusManager />
+          )}
+
+          {activeTab === 'plan-editor' && (
+            <div className="-m-8 h-[calc(100vh-5rem)]">
+              <Plan embedded />
+            </div>
+          )}
+
+          {activeTab === 'interactive-drawing' && (
+            <div className="-m-8 h-[calc(100vh-5rem)]">
+              <InteractiveDrawing embedded />
+            </div>
+          )}
+
+          {activeTab === 'elements' && (
+            <ElementsManager />
           )}
         </main>
       </div>

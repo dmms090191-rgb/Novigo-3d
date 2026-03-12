@@ -13,6 +13,8 @@ export interface ClientData {
 
 export const clientService = {
   async getAllClients() {
+    if (!supabase) return [];
+
     const { data, error } = await supabase
       .from('clients')
       .select(`
@@ -26,6 +28,8 @@ export const clientService = {
   },
 
   async getClientById(id: string) {
+    if (!supabase) return null;
+
     const { data, error } = await supabase
       .from('clients')
       .select('*')
@@ -37,6 +41,8 @@ export const clientService = {
   },
 
   async getClientByEmail(email: string) {
+    if (!supabase) return null;
+
     const { data, error } = await supabase
       .from('clients')
       .select('*')
@@ -48,6 +54,8 @@ export const clientService = {
   },
 
   async createClient(clientData: ClientData) {
+    if (!supabase) return null;
+
     const { data: maxIdData } = await supabase
       .from('clients')
       .select('id')
@@ -68,6 +76,8 @@ export const clientService = {
   },
 
   async updateClient(id: string, updates: Partial<ClientData>) {
+    if (!supabase) return null;
+
     const { data, error } = await supabase
       .from('clients')
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -80,6 +90,8 @@ export const clientService = {
   },
 
   async deleteClient(id: string) {
+    if (!supabase) return;
+
     const { error } = await supabase
       .from('clients')
       .delete()
@@ -89,6 +101,8 @@ export const clientService = {
   },
 
   async updateClientStatus(id: string, statusId: string | null) {
+    if (!supabase) return null;
+
     const { data, error } = await supabase
       .from('clients')
       .update({ status_id: statusId })

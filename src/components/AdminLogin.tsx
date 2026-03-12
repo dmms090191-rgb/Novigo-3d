@@ -1,35 +1,30 @@
 import React, { useState } from 'react';
 import { Shield, Mail, Lock, LogIn, AlertCircle } from 'lucide-react';
-import { Admin } from '../types/Admin';
 
 interface AdminLoginProps {
-  admins: Admin[];
-  onLoginSuccess: (email: string, password: string) => boolean;
+  onLoginSuccess: (email: string, password: string) => Promise<boolean>;
 }
 
-const AdminLogin: React.FC<AdminLoginProps> = ({ admins, onLoginSuccess }) => {
+const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
 
-    const admin = admins.find(
-      a => a.email === email && a.motDePasse === password
-    );
-
-    if (admin) {
-      const success = onLoginSuccess(email, password);
+    try {
+      const success = await onLoginSuccess(email, password);
       if (!success) {
-        setError('Erreur de connexion');
-      }
-    } else {
-      const superAdminSuccess = onLoginSuccess(email, password);
-      if (!superAdminSuccess) {
         setError('Email ou mot de passe incorrect');
       }
+    } catch (err) {
+      setError('Erreur de connexion');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -99,10 +94,20 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ admins, onLoginSuccess }) => {
 
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-orange-600 text-white py-3 px-4 rounded-lg font-medium hover:from-red-700 hover:to-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
+              disabled={isLoading}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-orange-600 text-white py-3 px-4 rounded-lg font-medium hover:from-red-700 hover:to-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <LogIn className="w-5 h-5" />
-              Se connecter
+              {isLoading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Connexion...
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-5 h-5" />
+                  Se connecter
+                </>
+              )}
             </button>
           </form>
 

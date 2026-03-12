@@ -53,3 +53,23 @@ export interface SceneData {
   terrainCells: TerrainCell[];
   gridSettings: GridSettings;
 }
+
+export interface TerrainConfig {
+  width: number;
+  length: number;
+  cellSize: number;
+}
+
+export interface Scene {
+  id: string;
+  client_id?: number | null;
+  name: string;
+  terrain: TerrainConfig | null;
+  blocks: Block[];
+  walls: Wall[];
+  bricks: Brick[];
+  terrain_cells: TerrainCell[];
+  grid_settings: GridSettings | null;
+  created_at: string;
+  updated_at: string;
+}

@@ -10,6 +10,8 @@ export interface SellerData {
 
 export const sellerService = {
   async getAllSellers() {
+    if (!supabase) return [];
+
     const { data, error } = await supabase
       .from('sellers')
       .select('*')
@@ -20,6 +22,8 @@ export const sellerService = {
   },
 
   async updateSeller(id: string, updates: Partial<SellerData>) {
+    if (!supabase) return null;
+
     const { data, error } = await supabase
       .from('sellers')
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -32,6 +36,8 @@ export const sellerService = {
   },
 
   async deleteSeller(id: string) {
+    if (!supabase) return;
+
     const { error } = await supabase
       .from('sellers')
       .delete()
@@ -41,6 +47,8 @@ export const sellerService = {
   },
 
   async deleteMultipleSellers(ids: string[]) {
+    if (!supabase) return;
+
     const { error } = await supabase
       .from('sellers')
       .delete()
@@ -50,6 +58,8 @@ export const sellerService = {
   },
 
   async getSellerByEmail(email: string) {
+    if (!supabase) return null;
+
     const { data, error } = await supabase
       .from('sellers')
       .select('*')

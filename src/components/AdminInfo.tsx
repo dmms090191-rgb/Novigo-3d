@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Shield, Mail, Lock, Eye, EyeOff, Check, X, Sparkles, Settings, User } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Shield, Mail, Lock, Eye, EyeOff, Check, X, Sparkles, Settings, User, Save, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface AdminInfoProps {
@@ -7,92 +7,166 @@ interface AdminInfoProps {
 }
 
 const AdminInfo: React.FC<AdminInfoProps> = ({ adminEmail }) => {
-  const [passwordDigits, setPasswordDigits] = useState<string[]>(['0', '0', '0', '0', '0', '0']);
+  const [passwordDigits, setPasswordDigits] = useState<string[]>(['', '', '', '', '', '']);
   const [showPassword, setShowPassword] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingName, setIsLoadingName] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [nameMessage, setNameMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [email, setEmail] = useState('');
+  const [adminId, setAdminId] = useState<string | null>(null);
+  const [originalPassword, setOriginalPassword] = useState('');
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
+  const currentPassword = useMemo(() => passwordDigits.join(''), [passwordDigits]);
+  const isPasswordComplete = currentPassword.length === 6;
+
   useEffect(() => {
-    loadCurrentPassword();
     loadAdminInfo();
   }, [adminEmail]);
 
   const loadAdminInfo = async () => {
+    if (!supabase) return;
+
     try {
       const { data } = await supabase
         .from('admins')
-        .select('first_name, last_name')
+        .select('id, first_name, last_name, email, password_pin')
         .eq('email', adminEmail)
         .maybeSingle();
 
       if (data) {
+        setAdminId(data.id);
         setFirstName(data.first_name || '');
         setLastName(data.last_name || '');
+        setEmail(data.email || adminEmail);
+        if (data.password_pin) {
+          setOriginalPassword(data.password_pin);
+          const pinDigits = data.password_pin.split('');
+          while (pinDigits.length < 6) pinDigits.push('');
+          setPasswordDigits(pinDigits.slice(0, 6));
+        }
+      } else {
+        setEmail(adminEmail);
       }
     } catch (error) {
       console.error('Error loading admin info:', error);
+      setEmail(adminEmail);
     }
   };
 
-  const handleSaveName = async () => {
-    setIsLoadingName(true);
-    setNameMessage(null);
+  const handleSaveAll = async () => {
+    if (!supabase) {
+      setMessage({ type: 'error', text: 'Connexion a la base de donnees non disponible' });
+      return;
+    }
+
+    setIsSaving(true);
+    setMessage(null);
+
+    const pinString = passwordDigits.join('');
+
+    if (pinString.length !== 6) {
+      setMessage({ type: 'error', text: 'Le mot de passe doit contenir exactement 6 chiffres' });
+      setIsSaving(false);
+      return;
+    }
 
     try {
-      const { error } = await supabase
+      const { data: currentAdmin } = await supabase
         .from('admins')
-        .update({
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('email', adminEmail);
-
-      if (error) throw error;
-
-      setNameMessage({ type: 'success', text: 'Informations enregistrees avec succes' });
-      setTimeout(() => setNameMessage(null), 2000);
-    } catch (error: any) {
-      console.error('Error saving admin info:', error);
-      setNameMessage({ type: 'error', text: error.message || 'Erreur lors de l\'enregistrement' });
-    } finally {
-      setIsLoadingName(false);
-    }
-  };
-
-  const loadCurrentPassword = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setPasswordDigits(['0', '0', '0', '0', '0', '0']);
-        return;
-      }
-
-      const { data } = await supabase
-        .from('password_pins')
-        .select('pin')
-        .eq('user_id', user.id)
+        .select('password_pin')
+        .eq('email', adminEmail)
         .maybeSingle();
 
-      if (data?.pin) {
-        setPasswordDigits(data.pin.split(''));
+      const currentDbPassword = currentAdmin?.password_pin || '';
+
+      if (adminId) {
+        const { error } = await supabase
+          .from('admins')
+          .update({
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            full_name: `${firstName.trim()} ${lastName.trim()}`,
+            email: email.trim(),
+            password_pin: pinString,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', adminId);
+
+        if (error) throw error;
       } else {
-        setPasswordDigits(['0', '0', '0', '0', '0', '0']);
+        const { data: existingAdmin } = await supabase
+          .from('admins')
+          .select('id')
+          .eq('email', adminEmail)
+          .maybeSingle();
+
+        if (existingAdmin) {
+          const { error } = await supabase
+            .from('admins')
+            .update({
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
+              full_name: `${firstName.trim()} ${lastName.trim()}`,
+              password_pin: pinString,
+              updated_at: new Date().toISOString()
+            })
+            .eq('email', adminEmail);
+
+          if (error) throw error;
+          setAdminId(existingAdmin.id);
+        } else {
+          const { data: newAdmin, error } = await supabase
+            .from('admins')
+            .insert({
+              email: adminEmail,
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
+              full_name: `${firstName.trim()} ${lastName.trim()}`,
+              password_pin: pinString,
+              role: 'admin',
+              status: 'active'
+            })
+            .select('id')
+            .single();
+
+          if (error) throw error;
+          if (newAdmin) setAdminId(newAdmin.id);
+        }
       }
-    } catch (error) {
-      console.error('Error loading password:', error);
-      setPasswordDigits(['0', '0', '0', '0', '0', '0']);
+
+      setOriginalPassword(pinString);
+
+      const savedMessage = pinString === currentDbPassword
+        ? 'Informations enregistrees (mot de passe inchange)'
+        : 'Toutes les informations ont ete enregistrees avec succes';
+      setMessage({ type: 'success', text: savedMessage });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (error: unknown) {
+      console.error('Erreur lors de la sauvegarde:', error);
+      let errorMessage = 'Erreur lors de l\'enregistrement';
+      if (error && typeof error === 'object') {
+        const supaError = error as { message?: string; details?: string; hint?: string; code?: string };
+        errorMessage = supaError.message || supaError.details || supaError.hint || errorMessage;
+        console.error('Details:', supaError.details, 'Hint:', supaError.hint, 'Code:', supaError.code);
+      }
+      setMessage({ type: 'error', text: errorMessage });
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleDigitChange = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
+
+    if (index === 0 && value && passwordDigits.every(d => d !== '')) {
+      const newDigits = [value.slice(-1), '', '', '', '', ''];
+      setPasswordDigits(newDigits);
+      inputRefs.current[1]?.focus();
+      return;
+    }
 
     const newDigits = [...passwordDigits];
     newDigits[index] = value.slice(-1);
@@ -106,6 +180,14 @@ const AdminInfo: React.FC<AdminInfoProps> = ({ adminEmail }) => {
   const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && !passwordDigits[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
+    }
+    if (e.key === 'ArrowLeft' && index > 0) {
+      e.preventDefault();
+      inputRefs.current[index - 1]?.focus();
+    }
+    if (e.key === 'ArrowRight' && index < 5) {
+      e.preventDefault();
+      inputRefs.current[index + 1]?.focus();
     }
   };
 
@@ -122,60 +204,8 @@ const AdminInfo: React.FC<AdminInfoProps> = ({ adminEmail }) => {
     });
     setPasswordDigits(newDigits);
 
-    const nextEmptyIndex = newDigits.findIndex(d => !d);
-    if (nextEmptyIndex !== -1) {
-      inputRefs.current[nextEmptyIndex]?.focus();
-    } else {
-      inputRefs.current[5]?.focus();
-    }
-  };
-
-  const handleSavePassword = async () => {
-    const password = passwordDigits.join('');
-
-    if (password.length !== 6) {
-      setMessage({ type: 'error', text: 'Le mot de passe doit contenir 6 chiffres' });
-      return;
-    }
-
-    setIsLoading(true);
-    setMessage(null);
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not found');
-
-      const { error: authError } = await supabase.auth.updateUser({
-        password: password
-      });
-
-      if (authError) throw authError;
-
-      const { error: pinError } = await supabase
-        .from('password_pins')
-        .upsert({
-          user_id: user.id,
-          pin: password,
-          updated_at: new Date().toISOString()
-        });
-
-      if (pinError) throw pinError;
-
-      setMessage({ type: 'success', text: 'Mot de passe modifie avec succes' });
-      setTimeout(() => {
-        setMessage(null);
-      }, 2000);
-    } catch (error: any) {
-      console.error('Erreur lors de la modification du mot de passe:', error);
-      setMessage({ type: 'error', text: error.message || 'Erreur lors de la modification du mot de passe' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleCancel = () => {
-    loadCurrentPassword();
-    setMessage(null);
+    const nextIndex = Math.min(digits.length, 5);
+    inputRefs.current[nextIndex]?.focus();
   };
 
   return (
@@ -205,20 +235,20 @@ const AdminInfo: React.FC<AdminInfoProps> = ({ adminEmail }) => {
           <div className="bg-gradient-to-r from-cyan-500/5 to-blue-500/5 rounded-xl p-4 border border-cyan-500/10">
             <div className="flex items-center gap-2 mb-3">
               <Sparkles className="w-4 h-4 text-cyan-400" />
-              <span className="text-sm font-medium text-cyan-400">Securite</span>
+              <span className="text-sm font-medium text-cyan-400">Informations</span>
             </div>
             <ul className="text-xs text-slate-400 space-y-2">
               <li className="flex items-start gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-1.5 flex-shrink-0" />
+                <span>Nom et prenom</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-1.5 flex-shrink-0" />
+                <span>Adresse email</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-1.5 flex-shrink-0" />
                 <span>Code a 6 chiffres</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-1.5 flex-shrink-0" />
-                <span>Unique et confidentiel</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-1.5 flex-shrink-0" />
-                <span>Changement regulier</span>
               </li>
             </ul>
           </div>
@@ -234,7 +264,7 @@ const AdminInfo: React.FC<AdminInfoProps> = ({ adminEmail }) => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-white">Info Admin</h1>
-                <p className="text-sm text-slate-400">Consultez et modifiez vos informations</p>
+                <p className="text-sm text-slate-400">Modifiez vos informations et cliquez sur Enregistrer</p>
               </div>
             </div>
           </div>
@@ -243,10 +273,10 @@ const AdminInfo: React.FC<AdminInfoProps> = ({ adminEmail }) => {
             <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
               <div className="flex items-center gap-3 mb-4">
                 <User className="w-5 h-5 text-cyan-400" />
-                <h2 className="text-lg font-semibold text-white">Identite administrateur</h2>
+                <h2 className="text-lg font-semibold text-white">Identite</h2>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-2">
                     Prenom
@@ -272,65 +302,27 @@ const AdminInfo: React.FC<AdminInfoProps> = ({ adminEmail }) => {
                   />
                 </div>
               </div>
-
-              {nameMessage && (
-                <div
-                  className={`p-3 rounded-xl mb-4 ${
-                    nameMessage.type === 'success'
-                      ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
-                      : 'bg-red-500/10 border border-red-500/30 text-red-400'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    {nameMessage.type === 'success' ? (
-                      <Check className="w-4 h-4" />
-                    ) : (
-                      <X className="w-4 h-4" />
-                    )}
-                    <span className="text-sm font-medium">{nameMessage.text}</span>
-                  </div>
-                </div>
-              )}
-
-              <button
-                onClick={handleSaveName}
-                disabled={isLoadingName || (!firstName.trim() && !lastName.trim())}
-                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 px-6 rounded-xl hover:from-cyan-600 hover:to-blue-700 disabled:from-slate-600 disabled:to-slate-700 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/40"
-              >
-                {isLoadingName ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Enregistrement...
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-5 h-5" />
-                    Enregistrer l'identite
-                  </>
-                )}
-              </button>
             </div>
 
             <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
               <div className="flex items-center gap-3 mb-4">
                 <Mail className="w-5 h-5 text-cyan-400" />
-                <h2 className="text-lg font-semibold text-white">Email administrateur</h2>
+                <h2 className="text-lg font-semibold text-white">Email</h2>
               </div>
-              <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 rounded-lg flex items-center justify-center">
-                    <Mail className="w-5 h-5 text-cyan-400" />
-                  </div>
-                  <span className="text-lg font-medium text-white">{adminEmail}</span>
-                </div>
-              </div>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Entrez votre email"
+                className="w-full bg-slate-900/50 border-2 border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all duration-200"
+              />
             </div>
 
             <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <Lock className="w-5 h-5 text-cyan-400" />
-                  <h2 className="text-lg font-semibold text-white">Mot de passe</h2>
+                  <h2 className="text-lg font-semibold text-white">Mot de passe (6 chiffres)</h2>
                 </div>
                 <button
                   type="button"
@@ -351,78 +343,76 @@ const AdminInfo: React.FC<AdminInfoProps> = ({ adminEmail }) => {
                 </button>
               </div>
 
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-4 text-center">
-                    Mot de passe actuel (6 chiffres)
-                  </label>
-
-                  <div className="flex gap-3 mb-4 justify-center">
-                    {passwordDigits.map((digit, index) => (
-                      <input
-                        key={index}
-                        ref={(el) => (inputRefs.current[index] = el)}
-                        type={showPassword ? 'text' : 'password'}
-                        inputMode="numeric"
-                        maxLength={1}
-                        value={digit}
-                        onChange={(e) => handleDigitChange(index, e.target.value)}
-                        onKeyDown={(e) => handleKeyDown(index, e)}
-                        onPaste={handlePaste}
-                        className="w-14 h-14 text-center text-2xl font-bold bg-slate-900/50 border-2 border-slate-600 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all duration-200"
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {message && (
-                  <div
-                    className={`p-4 rounded-xl ${
-                      message.type === 'success'
-                        ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
-                        : 'bg-red-500/10 border border-red-500/30 text-red-400'
+              <div className="flex gap-3 justify-center" onPaste={handlePaste}>
+                {passwordDigits.map((digit, index) => (
+                  <input
+                    key={index}
+                    ref={(el) => { inputRefs.current[index] = el; }}
+                    type={showPassword ? 'text' : 'password'}
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleDigitChange(index, e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(index, e)}
+                    className={`w-14 h-14 text-center text-2xl font-bold bg-slate-900/50 border-2 rounded-xl text-white focus:outline-none focus:ring-2 transition-all duration-200 ${
+                      isPasswordComplete
+                        ? 'border-emerald-500 focus:ring-emerald-500/50 focus:border-emerald-500'
+                        : 'border-slate-600 focus:ring-cyan-500/50 focus:border-cyan-500'
                     }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      {message.type === 'success' ? (
-                        <Check className="w-5 h-5" />
-                      ) : (
-                        <X className="w-5 h-5" />
-                      )}
-                      <span className="font-medium">{message.text}</span>
-                    </div>
-                  </div>
-                )}
+                  />
+                ))}
+              </div>
 
-                <div className="flex gap-4">
-                  <button
-                    onClick={handleSavePassword}
-                    disabled={isLoading || passwordDigits.some(d => !d)}
-                    className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 px-6 rounded-xl hover:from-cyan-600 hover:to-blue-700 disabled:from-slate-600 disabled:to-slate-700 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/40"
-                  >
-                    {isLoading ? (
-                      <>
-                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        Enregistrement...
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-5 h-5" />
-                        Enregistrer
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={handleCancel}
-                    disabled={isLoading}
-                    className="flex-1 flex items-center justify-center gap-2 bg-slate-700/50 text-slate-300 py-3 px-6 rounded-xl hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium border border-slate-600"
-                  >
+              {isPasswordComplete && (
+                <div className="mt-4 p-3 rounded-xl flex items-center justify-center gap-2 bg-emerald-500/10 border border-emerald-500/30">
+                  <Check className="w-4 h-4 text-emerald-400" />
+                  <span className="text-sm font-medium text-emerald-400">
+                    Mot de passe valide (6 chiffres)
+                  </span>
+                </div>
+              )}
+
+              <p className="text-center text-xs text-slate-500 mt-3">
+                Utilisez les fleches gauche/droite pour naviguer entre les chiffres
+              </p>
+            </div>
+
+            {message && (
+              <div
+                className={`p-4 rounded-xl ${
+                  message.type === 'success'
+                    ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
+                    : 'bg-red-500/10 border border-red-500/30 text-red-400'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {message.type === 'success' ? (
+                    <Check className="w-5 h-5" />
+                  ) : (
                     <X className="w-5 h-5" />
-                    Annuler
-                  </button>
+                  )}
+                  <span className="font-medium">{message.text}</span>
                 </div>
               </div>
-            </div>
+            )}
+
+            <button
+              onClick={handleSaveAll}
+              disabled={isSaving}
+              className="w-full flex items-center justify-center gap-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-4 px-6 rounded-xl hover:from-cyan-600 hover:to-blue-700 disabled:from-slate-600 disabled:to-slate-700 disabled:cursor-not-allowed transition-all duration-200 font-semibold text-lg shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/40"
+            >
+              {isSaving ? (
+                <>
+                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Enregistrement en cours...
+                </>
+              ) : (
+                <>
+                  <Save className="w-6 h-6" />
+                  Enregistrer toutes les modifications
+                </>
+              )}
+            </button>
           </div>
         </div>
       </div>

@@ -6,7 +6,7 @@ import HeroHouseAnimation from '../components/HeroHouseAnimation';
 import { Registration } from '../types/Registration';
 
 interface HomePageProps {
-  onLogin?: (email: string, password: string) => boolean;
+  onLogin?: (email: string, password: string) => Promise<boolean>;
   onRegister?: (registration: Registration) => void;
 }
 
@@ -122,52 +122,56 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister }) => {
     await new Promise(resolve => setTimeout(resolve, 500));
 
     if (onLogin) {
-      const success = onLogin(email, password);
-      if (!success) {
-        try {
-          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-          const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      try {
+        const success = await onLogin(email, password);
+        if (!success) {
+          try {
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-          const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-            method: 'POST',
-            headers: {
-              'apikey': supabaseAnonKey,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email, password }),
-          });
-
-          const data = await response.json();
-
-          if (response.ok && data.access_token) {
-            const clientResponse = await fetch(`${supabaseUrl}/rest/v1/clients?id=eq.${data.user.id}`, {
+            const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+              method: 'POST',
               headers: {
                 'apikey': supabaseAnonKey,
-                'Authorization': `Bearer ${data.access_token}`,
                 'Content-Type': 'application/json',
               },
+              body: JSON.stringify({ email, password }),
             });
 
-            const clientData = await clientResponse.json();
+            const data = await response.json();
 
-            if (clientResponse.ok && clientData.length > 0) {
-              sessionStorage.setItem('clientData', JSON.stringify({
-                user: data.user,
-                token: data.access_token,
-                client: clientData[0]
-              }));
-              setIsLoading(false);
-              window.location.href = '/client/dashboard';
-              return;
+            if (response.ok && data.access_token) {
+              const clientResponse = await fetch(`${supabaseUrl}/rest/v1/clients?id=eq.${data.user.id}`, {
+                headers: {
+                  'apikey': supabaseAnonKey,
+                  'Authorization': `Bearer ${data.access_token}`,
+                  'Content-Type': 'application/json',
+                },
+              });
+
+              const clientData = await clientResponse.json();
+
+              if (clientResponse.ok && clientData.length > 0) {
+                sessionStorage.setItem('clientData', JSON.stringify({
+                  user: data.user,
+                  token: data.access_token,
+                  client: clientData[0]
+                }));
+                setIsLoading(false);
+                window.location.href = '/client/dashboard';
+                return;
+              } else {
+                setError('Compte client introuvable');
+              }
             } else {
-              setError('Compte client introuvable');
+              setError('Email ou mot de passe incorrect');
             }
-          } else {
+          } catch (err) {
             setError('Email ou mot de passe incorrect');
           }
-        } catch (err) {
-          setError('Email ou mot de passe incorrect');
         }
+      } catch (err) {
+        setError('Email ou mot de passe incorrect');
       }
     } else {
       setError('Email ou mot de passe incorrect');

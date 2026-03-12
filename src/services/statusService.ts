@@ -3,6 +3,8 @@ import { Status } from '../types/Status';
 
 export const statusService = {
   async getAllStatuses(): Promise<Status[]> {
+    if (!supabase) return [];
+
     const { data, error } = await supabase
       .from('statuses')
       .select('*')
@@ -16,7 +18,9 @@ export const statusService = {
     return data || [];
   },
 
-  async createStatus(name: string, color: string): Promise<Status> {
+  async createStatus(name: string, color: string): Promise<Status | null> {
+    if (!supabase) return null;
+
     const { data, error } = await supabase
       .from('statuses')
       .insert([{ name, color }])
@@ -32,6 +36,8 @@ export const statusService = {
   },
 
   async deleteStatus(id: string): Promise<void> {
+    if (!supabase) return;
+
     const { error } = await supabase
       .from('statuses')
       .delete()
@@ -43,7 +49,9 @@ export const statusService = {
     }
   },
 
-  async updateStatus(id: string, name: string, color: string): Promise<Status> {
+  async updateStatus(id: string, name: string, color: string): Promise<Status | null> {
+    if (!supabase) return null;
+
     const { data, error } = await supabase
       .from('statuses')
       .update({ name, color })

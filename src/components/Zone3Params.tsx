@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { GridSettings, Wall, Brick, Block } from '../types/Scene';
-import { Mountain, Grid3x3 as Grid3X3, Ruler, Square, Cpu, Activity, Database, Zap, Building2, X } from 'lucide-react';
+import { Mountain, Grid3x3 as Grid3X3, Ruler, Square, Cpu, Activity, Database, Zap, X } from 'lucide-react';
+import { LibraryElement } from '../types/ElementLibrary';
+import ElementLibraryPanel from './ElementLibraryPanel';
 
-type EditorMode = 'navigation' | 'terrain' | 'construction';
-type TerrainType = 'plat' | 'urbain' | null;
+type EditorMode = 'navigation' | 'terrain' | 'robot';
+type TerrainType = 'plat' | null;
 
 interface TerrainConfig {
   width: number;
@@ -23,11 +25,13 @@ interface Zone3ParamsProps {
   onCreateTerrain: (width: number, length: number, cellSize: number) => void;
   onPreviewChange?: (preview: TerrainConfig | null) => void;
   onDeleteTerrain?: () => void;
+  selectedElement?: LibraryElement | null;
+  onSelectElement?: (element: LibraryElement | null) => void;
+  onDrawOnScene?: () => void;
 }
 
 const terrainTypes = [
   { id: 'plat' as TerrainType, name: 'Terrain Plat', icon: Square, color: 'cyan', desc: 'Surface plane standard' },
-  { id: 'urbain' as TerrainType, name: 'Urbain', icon: Building2, color: 'amber', desc: 'Zone constructible' },
 ];
 
 const Zone3Params: React.FC<Zone3ParamsProps> = ({
@@ -35,7 +39,10 @@ const Zone3Params: React.FC<Zone3ParamsProps> = ({
   terrain,
   onCreateTerrain,
   onPreviewChange,
-  onDeleteTerrain
+  onDeleteTerrain,
+  selectedElement,
+  onSelectElement,
+  onDrawOnScene
 }) => {
   const [selectedTerrainType, setSelectedTerrainType] = useState<TerrainType>(null);
   const [terrainWidth, setTerrainWidth] = useState(terrain?.width || 20);
@@ -429,62 +436,57 @@ const Zone3Params: React.FC<Zone3ParamsProps> = ({
         </div>
       )}
 
-      {editorMode !== 'terrain' && terrain && (
+      {editorMode === 'navigation' && terrain && (
         <div className="relative p-5">
-          <div className="tech-card p-4 corner-accent">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 bg-emerald-500/10 flex items-center justify-center border border-emerald-500/30">
-                <Mountain className="w-4 h-4 text-emerald-400" />
+          <div className="flex items-center gap-4 mb-6 pb-4 border-b border-emerald-500/10">
+            <div className="relative">
+              <div className="w-12 h-12 bg-[#0f1318] flex items-center justify-center border border-emerald-500/30">
+                <Mountain className="w-6 h-6 text-emerald-400" />
               </div>
-              <div className="flex-1">
-                <h3 className="text-sm font-semibold text-white uppercase tracking-wider">Terrain Actif</h3>
-                <div className="flex items-center gap-2 mt-1">
-                  <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-                  <p className="text-[10px] text-emerald-500/70 font-mono">EN LIGNE</p>
-                </div>
-              </div>
-              {onDeleteTerrain && (
-                <button
-                  onClick={onDeleteTerrain}
-                  className="relative w-8 h-8 group"
-                  title="Supprimer le terrain"
-                >
-                  <div className="absolute inset-0 rotate-45 border-2 border-red-500/40 group-hover:border-red-500 group-hover:bg-red-500/20 transition-all duration-300"></div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <X className="w-4 h-4 text-red-400 group-hover:text-red-300 group-hover:scale-110 transition-all duration-300" />
-                  </div>
-                  <div className="absolute inset-0 rotate-45 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-0.5 h-0.5 bg-red-400"></div>
-                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0.5 h-0.5 bg-red-400"></div>
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-0.5 bg-red-400"></div>
-                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-0.5 bg-red-400"></div>
-                  </div>
-                </button>
-              )}
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 animate-pulse"></div>
             </div>
-            <div className="space-y-2 font-mono text-xs">
-              <div className="flex justify-between text-gray-400">
-                <span>LARGEUR</span>
-                <span className="text-cyan-400">{terrain.width} m</span>
+            <div className="flex-1">
+              <h2 className="text-base font-bold text-white tracking-wide uppercase">Terrain Actif</h2>
+              <div className="flex items-center gap-2 mt-1">
+                <Activity className="w-3 h-3 text-emerald-500" />
+                <p className="text-xs text-emerald-500/70 font-mono">TERRAIN.EN_LIGNE</p>
               </div>
-              <div className="flex justify-between text-gray-400">
-                <span>LONGUEUR</span>
-                <span className="text-emerald-400">{terrain.length} m</span>
+            </div>
+            {onDeleteTerrain && (
+              <button
+                onClick={onDeleteTerrain}
+                className="relative w-10 h-10 group"
+                title="Supprimer le terrain"
+              >
+                <div className="absolute inset-0 rotate-45 border-2 border-red-500/40 group-hover:border-red-500 group-hover:bg-red-500/20 transition-all duration-300"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <X className="w-5 h-5 text-red-400 group-hover:text-red-300 group-hover:scale-110 transition-all duration-300" />
+                </div>
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="tech-stat-card p-4 bg-gradient-to-br from-cyan-500/10 to-transparent">
+              <div className="flex items-center gap-2 mb-2">
+                <Ruler className="w-4 h-4 text-cyan-400" />
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Largeur</p>
               </div>
-              <div className="flex justify-between text-gray-400">
-                <span>SURFACE</span>
-                <span className="text-white">{terrain.width * terrain.length} m2</span>
+              <p className="text-3xl font-bold text-cyan-400 font-mono">{terrain.width}</p>
+              <p className="text-xs text-cyan-500/50 font-mono mt-1">metres</p>
+            </div>
+            <div className="tech-stat-card p-4 bg-gradient-to-br from-emerald-500/10 to-transparent">
+              <div className="flex items-center gap-2 mb-2">
+                <Ruler className="w-4 h-4 text-emerald-400" />
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Longueur</p>
               </div>
-              <div className="h-px bg-gray-700/50 my-2"></div>
-              <div className="flex justify-between text-gray-400">
-                <span>PETITE CELLULE</span>
-                <span className="text-amber-400">{terrain.cellSize * 100} cm</span>
-              </div>
-              <div className="flex justify-between text-gray-400">
-                <span>GRANDE CELLULE</span>
-                <span className="text-rose-400">{terrain.cellSize * 100 * 10} cm</span>
-              </div>
-              <div className="h-px bg-gray-700/50 my-2"></div>
+              <p className="text-3xl font-bold text-emerald-400 font-mono">{terrain.length}</p>
+              <p className="text-xs text-emerald-500/50 font-mono mt-1">metres</p>
+            </div>
+          </div>
+
+          <div className="tech-card p-4 corner-accent">
+            <div className="space-y-3 font-mono text-sm">
               <div className="flex justify-between text-gray-400">
                 <span>CELLULES (L x l)</span>
                 <span className="text-white">{Math.ceil(terrain.width / terrain.cellSize)} x {Math.ceil(terrain.length / terrain.cellSize)}</span>
@@ -493,8 +495,26 @@ const Zone3Params: React.FC<Zone3ParamsProps> = ({
                 <span>TOTAL CELLULES</span>
                 <span className="text-cyan-400">{Math.ceil(terrain.width / terrain.cellSize) * Math.ceil(terrain.length / terrain.cellSize)}</span>
               </div>
+              <div className="flex justify-between text-gray-400">
+                <span>TAILLE CELLULE</span>
+                <span className="text-white">{terrain.cellSize * 100} cm</span>
+              </div>
+              <div className="flex justify-between text-gray-400">
+                <span>SURFACE</span>
+                <span className="text-emerald-400">{terrain.width * terrain.length} m2</span>
+              </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {editorMode === 'robot' && terrain && (
+        <div className="relative p-5 space-y-5">
+          <ElementLibraryPanel
+            selectedElement={selectedElement || null}
+            onSelectElement={onSelectElement || (() => {})}
+            onDrawOnScene={onDrawOnScene}
+          />
         </div>
       )}
     </div>

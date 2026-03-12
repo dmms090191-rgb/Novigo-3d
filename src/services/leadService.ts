@@ -15,8 +15,7 @@ export interface LeadData {
 
 export const leadService = {
   async createLead(leadData: LeadData) {
-    console.log('🚀 [leadService v2.0] Tentative de création de lead:', leadData);
-    console.log('🚀 [leadService v2.0] Timestamp:', new Date().toISOString());
+    if (!supabase) return null;
 
     try {
       const { data: maxIdData } = await supabase
@@ -34,33 +33,17 @@ export const leadService = {
         .select()
         .maybeSingle();
 
-      console.log('📊 [leadService v2.0] Réponse brute Supabase:', { data, error });
-
-      if (error) {
-        console.error('❌ [leadService v2.0] ERREUR DÉTECTÉE');
-        console.error('❌ Code:', error.code);
-        console.error('❌ Message:', error.message);
-        console.error('❌ Détails:', error.details);
-        console.error('❌ Hint:', error.hint);
-        throw new Error(`Erreur Supabase: ${error.message} (Code: ${error.code})`);
-      }
-
-      if (!data) {
-        console.error('❌ [leadService v2.0] Aucune donnée retournée');
-        throw new Error('Aucune donnée retournée par Supabase');
-      }
-
-      console.log('✅ [leadService v2.0] SUCCESS! Lead créé:', data);
+      if (error) throw error;
       return data;
-    } catch (err: any) {
-      console.error('❌ [leadService v2.0] Exception capturée:', err);
-      console.error('❌ [leadService v2.0] Type:', typeof err);
-      console.error('❌ [leadService v2.0] Message:', err.message);
+    } catch (err) {
+      console.error('Error creating lead:', err);
       throw err;
     }
   },
 
   async getAllLeads() {
+    if (!supabase) return [];
+
     const { data, error } = await supabase
       .from('leads')
       .select('*')
@@ -71,6 +54,8 @@ export const leadService = {
   },
 
   async updateLead(id: string, updates: Partial<LeadData>) {
+    if (!supabase) return null;
+
     const { data, error } = await supabase
       .from('leads')
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -83,6 +68,8 @@ export const leadService = {
   },
 
   async deleteLead(id: string) {
+    if (!supabase) return;
+
     const { error } = await supabase
       .from('leads')
       .delete()
@@ -92,9 +79,9 @@ export const leadService = {
   },
 
   async deleteMultipleLeads(ids: string[]) {
-    console.log('🔧 [deleteMultipleLeads] IDs reçus:', ids);
+    if (!supabase) return [];
+
     const numericIds = ids.map(id => parseInt(id));
-    console.log('🔧 [deleteMultipleLeads] IDs numériques:', numericIds);
 
     const { data, error } = await supabase
       .from('leads')
@@ -102,13 +89,13 @@ export const leadService = {
       .in('id', numericIds)
       .select();
 
-    console.log('🔧 [deleteMultipleLeads] Réponse Supabase:', { data, error });
-
     if (error) throw error;
     return data;
   },
 
   async getLeadByEmail(email: string) {
+    if (!supabase) return null;
+
     const { data, error } = await supabase
       .from('leads')
       .select('*')
@@ -120,6 +107,8 @@ export const leadService = {
   },
 
   async updateLeadStatus(id: string, status: string) {
+    if (!supabase) return null;
+
     const { data, error } = await supabase
       .from('leads')
       .update({ status })

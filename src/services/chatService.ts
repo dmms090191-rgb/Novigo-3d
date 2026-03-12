@@ -10,6 +10,8 @@ export interface ChatMessageData {
 
 export const chatService = {
   async sendMessage(messageData: ChatMessageData) {
+    if (!supabase) return null;
+
     const { data, error } = await supabase
       .from('chat_messages')
       .insert([messageData])
@@ -21,6 +23,8 @@ export const chatService = {
   },
 
   async getMessagesForClient(clientId: string) {
+    if (!supabase) return [];
+
     const { data, error } = await supabase
       .from('chat_messages')
       .select('*')
@@ -32,6 +36,8 @@ export const chatService = {
   },
 
   async markAsRead(messageId: string) {
+    if (!supabase) return null;
+
     const { data, error } = await supabase
       .from('chat_messages')
       .update({ read: true })
@@ -44,6 +50,8 @@ export const chatService = {
   },
 
   async getUnreadCount(clientId: string, userType: 'client' | 'seller') {
+    if (!supabase) return 0;
+
     const senderType = userType === 'client' ? 'seller' : 'client';
 
     const { data, error } = await supabase
@@ -58,6 +66,8 @@ export const chatService = {
   },
 
   subscribeToMessages(clientId: string, callback: (payload: any) => void) {
+    if (!supabase) return null;
+
     return supabase
       .channel(`chat:${clientId}`)
       .on(

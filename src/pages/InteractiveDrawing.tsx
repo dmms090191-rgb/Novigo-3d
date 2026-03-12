@@ -1,21 +1,25 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Layers, Box, HelpCircle, Activity, Cpu, Monitor, Eye } from 'lucide-react';
+import { ArrowLeft, Layers, Box, HelpCircle, Activity, Cpu, Monitor, Eye, Save, Plus, Cuboid, FolderOpen, Play } from 'lucide-react';
 import Zone2D from '../components/Zone2D';
 import Zone3D from '../components/Zone3D';
 import Zone3Params from '../components/Zone3Params';
 import ControlsHelp from '../components/ControlsHelp';
+import DrawingRecorder from '../components/DrawingRecorder';
+import Drawing3DPreview from '../components/Drawing3DPreview';
+import Animation3DViewer from '../components/Animation3DViewer';
 import { GridSettings, Wall, Brick, Block, TerrainCell, TerrainConfig } from '../types/Scene';
-import { getDefaultScene, saveScene, clearSceneData } from '../services/sceneService';
-import { LibraryElement, DrawingData, ScenePlacedElement } from '../types/ElementLibrary';
+import { getDefaultDrawing, saveDrawing, clearDrawingData } from '../services/drawingService';
+import { LibraryElement, ScenePlacedElement, DrawingData } from '../types/ElementLibrary';
+import { elementLibraryService } from '../services/elementLibraryService';
 
-type TabType = 'editor' | 'controls';
-type EditorMode = 'navigation' | 'terrain' | 'construction';
+type TabType = 'editor' | 'controls' | '3d';
+type EditorMode = 'navigation' | 'terrain' | 'robot';
 
-interface PlanProps {
+interface InteractiveDrawingProps {
   embedded?: boolean;
 }
 
-const Plan: React.FC<PlanProps> = ({ embedded = false }) => {
+const InteractiveDrawing: React.FC<InteractiveDrawingProps> = ({ embedded = false }) => {
   const [activeTab, setActiveTab] = useState<TabType>('editor');
   const [topHeight, setTopHeight] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
@@ -44,17 +48,19 @@ const Plan: React.FC<PlanProps> = ({ embedded = false }) => {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [bricks, setBricks] = useState<Brick[]>([]);
   const [terrainCells, setTerrainCells] = useState<TerrainCell[]>([]);
+  const [selectedElement, setSelectedElement] = useState<LibraryElement | null>(null);
   const [placedElements, setPlacedElements] = useState<ScenePlacedElement[]>([]);
-  const [elementsMap] = useState<Map<string, LibraryElement>>(new Map());
-  const [isDrawingMode, setIsDrawingMode] = useState(false);
-  const [currentDrawingStrokes, setCurrentDrawingStrokes] = useState<DrawingData | null>(null);
-  const drawingStartTimeRef = useRef<number>(0);
-  const currentStrokesRef = useRef<DrawingData['strokes']>([]);
+  const [elementsMap, setElementsMap] = useState<Map<string, LibraryElement>>(new Map());
+  const [showRecorder, setShowRecorder] = useState(false);
+  const [newElementName, setNewElementName] = useState('');
+  const [showNewElementModal, setShowNewElementModal] = useState(false);
+  const [isAnimation3DPlaying, setIsAnimation3DPlaying] = useState(false);
+  const [animation3DDrawingData, setAnimation3DDrawingData] = useState<DrawingData | null>(null);
 
   useEffect(() => {
     const loadScene = async () => {
       try {
-        const scene = await getDefaultScene();
+        const scene = await getDefaultDrawing();
         if (scene) {
           if (scene.terrain) {
             setTerrain(scene.terrain);
@@ -67,7 +73,7 @@ const Plan: React.FC<PlanProps> = ({ embedded = false }) => {
           if (scene.grid_settings) setGridSettings(scene.grid_settings);
         }
       } catch (error) {
-        console.error('Error loading scene:', error);
+        console.error('Error loading drawing:', error);
       } finally {
         setIsLoading(false);
         setTimeout(() => {
@@ -87,7 +93,7 @@ const Plan: React.FC<PlanProps> = ({ embedded = false }) => {
     }
 
     saveTimeoutRef.current = setTimeout(() => {
-      saveScene(terrain, blocks, walls, bricks, terrainCells, gridSettings);
+      saveDrawing(terrain, blocks, walls, bricks, terrainCells, gridSettings);
     }, 1000);
   }, [terrain, blocks, walls, bricks, terrainCells, gridSettings]);
 
@@ -128,7 +134,7 @@ const Plan: React.FC<PlanProps> = ({ embedded = false }) => {
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isDragging) {
-      const container = document.getElementById('plan-container');
+      const container = document.getElementById('drawing-container');
       if (container) {
         const rect = container.getBoundingClientRect();
         const newHeight = ((e.clientY - rect.top) / rect.height) * 100;
@@ -156,10 +162,7 @@ const Plan: React.FC<PlanProps> = ({ embedded = false }) => {
   };
 
   const handleAddBlock = (block: Block) => {
-    console.log('handleAddBlock appele avec:', block);
-    console.log('Blocs actuels avant:', blocks);
     const newBlocks = [...blocks, block];
-    console.log('Nouveaux blocs apres:', newBlocks);
     setBlocks(newBlocks);
   };
 
@@ -204,80 +207,87 @@ const Plan: React.FC<PlanProps> = ({ embedded = false }) => {
     setBricks([]);
     setTerrainCells([]);
     setEditorMode('terrain');
-    await clearSceneData();
+    await clearDrawingData();
   };
 
-  const handleStartDrawing = useCallback(() => {
-    setIsDrawingMode(true);
-    drawingStartTimeRef.current = Date.now();
-    currentStrokesRef.current = [];
-    setCurrentDrawingStrokes(null);
-  }, []);
-
-  const handleUpdateLivePoints = useCallback((points: Array<{x: number; y: number; timestamp: number}>) => {
-    if (points.length < 2) return;
-
-    const allStrokes = [
-      ...currentStrokesRef.current,
-      {
-        points: points,
-        color: '#00ffff',
-        width: 3,
-        startTime: 0,
-        endTime: points[points.length - 1].timestamp
-      }
-    ];
-
-    const allPoints = allStrokes.flatMap(s => s.points);
-    if (allPoints.length === 0) return;
-
-    const globalMinX = Math.min(...allPoints.map(p => p.x));
-    const globalMaxX = Math.max(...allPoints.map(p => p.x));
-    const globalMinY = Math.min(...allPoints.map(p => p.y));
-    const globalMaxY = Math.max(...allPoints.map(p => p.y));
-
-    const newDrawingData: DrawingData = {
-      strokes: allStrokes,
-      totalDuration: points[points.length - 1].timestamp,
-      canvasWidth: 800,
-      canvasHeight: 600,
-      boundingBox: { minX: globalMinX, minY: globalMinY, maxX: globalMaxX, maxY: globalMaxY }
+  const handlePlaceElement = useCallback((element: LibraryElement, x: number, y: number) => {
+    const newPlacedElement: ScenePlacedElement = {
+      id: `placed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      elementId: element.id,
+      x,
+      y,
+      rotation: 0,
+      scale: 1,
+      isDrawing: true,
+      drawingProgress: 0,
     };
 
-    console.log('Live drawing update:', newDrawingData.strokes.length, 'strokes');
-    setCurrentDrawingStrokes(newDrawingData);
-  }, []);
-
-  const handleAddStroke = useCallback((stroke: DrawingData['strokes'][0]) => {
-    currentStrokesRef.current.push(stroke);
-
-    const allPoints = currentStrokesRef.current.flatMap(s => s.points);
-    const minX = Math.min(...allPoints.map(p => p.x));
-    const maxX = Math.max(...allPoints.map(p => p.x));
-    const minY = Math.min(...allPoints.map(p => p.y));
-    const maxY = Math.max(...allPoints.map(p => p.y));
-
-    const newDrawingData: DrawingData = {
-      strokes: [...currentStrokesRef.current],
-      totalDuration: stroke.endTime,
-      canvasWidth: 800,
-      canvasHeight: 600,
-      boundingBox: { minX, minY, maxX, maxY }
-    };
-
-    setCurrentDrawingStrokes(newDrawingData);
-  }, []);
-
-  const handleStopDrawing = useCallback(() => {
-    setIsDrawingMode(false);
+    setPlacedElements(prev => [...prev, newPlacedElement]);
+    setElementsMap(prev => new Map(prev).set(element.id, element));
   }, []);
 
   const handleElementDrawingComplete = useCallback((placedElementId: string) => {
-    setPlacedElements(prev => prev.map(p =>
-      p.id === placedElementId
-        ? { ...p, isDrawing: false, drawingProgress: 1 }
-        : p
-    ));
+    setPlacedElements(prev =>
+      prev.map(el =>
+        el.id === placedElementId
+          ? { ...el, isDrawing: false, drawingProgress: 1 }
+          : el
+      )
+    );
+  }, []);
+
+  const handleDrawOnScene = useCallback(() => {
+    if (selectedElement) {
+      handlePlaceElement(selectedElement, 400, 300);
+    }
+  }, [selectedElement, handlePlaceElement]);
+
+  const handleStartNewElement = () => {
+    setShowNewElementModal(true);
+  };
+
+  const handleCreateAndRecord = async () => {
+    if (!newElementName.trim()) return;
+
+    const created = await elementLibraryService.create({
+      name: newElementName.trim(),
+      category: 'Mobilier',
+      icon: 'box',
+      width: 100,
+      height: 100,
+      depth: 100,
+    });
+
+    if (created) {
+      setSelectedElement(created);
+      setShowNewElementModal(false);
+      setNewElementName('');
+      setShowRecorder(true);
+    }
+  };
+
+  const handleSaveDrawing = async (drawingData: DrawingData, previewImage: string) => {
+    if (!selectedElement) return;
+
+    const success = await elementLibraryService.saveDrawing(
+      selectedElement.id,
+      drawingData,
+      previewImage
+    );
+
+    if (success) {
+      const updatedElement = { ...selectedElement, drawing_data: drawingData, preview_image: previewImage };
+      setSelectedElement(updatedElement);
+      setElementsMap(prev => new Map(prev).set(updatedElement.id, updatedElement));
+    }
+
+    setShowRecorder(false);
+  };
+
+  const handlePlayAnimation3D = useCallback(async () => {
+    setIsAnimation3DPlaying(false);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    setIsAnimation3DPlaying(true);
   }, []);
 
   return (
@@ -295,7 +305,7 @@ const Plan: React.FC<PlanProps> = ({ embedded = false }) => {
                 <div className="absolute -top-1 -right-1 w-3 h-3 bg-cyan-400 animate-pulse-glow"></div>
               </div>
               <div>
-                <h2 className="text-lg font-bold text-white tracking-wider uppercase">Plan Editor</h2>
+                <h2 className="text-lg font-bold text-white tracking-wider uppercase">Dessin Interactif</h2>
                 <div className="flex items-center gap-3 mt-1">
                   <div className="flex items-center gap-1.5">
                     <Activity className="w-3 h-3 text-cyan-500" />
@@ -309,13 +319,35 @@ const Plan: React.FC<PlanProps> = ({ embedded = false }) => {
                 </div>
               </div>
             </div>
-            <a
-              href="/"
-              className="flex items-center gap-2 text-gray-400 hover:text-cyan-400 font-medium transition-all px-4 py-2.5 tech-btn text-sm uppercase tracking-wider"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Retour
-            </a>
+            <div className="flex items-center gap-3">
+              {editorMode === 'robot' && (
+                <>
+                  <button
+                    onClick={handleStartNewElement}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/30 transition-all text-sm font-semibold uppercase tracking-wider"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Creer Element
+                  </button>
+                  {selectedElement && (
+                    <button
+                      onClick={() => setShowRecorder(true)}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/20 border border-amber-500/50 text-amber-400 hover:bg-amber-500/30 transition-all text-sm font-semibold uppercase tracking-wider"
+                    >
+                      <Save className="w-4 h-4" />
+                      Enregistrer Dessin
+                    </button>
+                  )}
+                </>
+              )}
+              <a
+                href="/"
+                className="flex items-center gap-2 text-gray-400 hover:text-cyan-400 font-medium transition-all px-4 py-2.5 tech-btn text-sm uppercase tracking-wider"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Retour
+              </a>
+            </div>
           </div>
         </div>
       )}
@@ -334,6 +366,17 @@ const Plan: React.FC<PlanProps> = ({ embedded = false }) => {
             Editeur
           </button>
           <button
+            onClick={() => setActiveTab('3d')}
+            className={`flex items-center gap-2.5 px-5 py-3 font-medium transition-all border-b-2 text-sm uppercase tracking-wider ${
+              activeTab === '3d'
+                ? 'text-emerald-400 border-emerald-400 bg-emerald-500/5'
+                : 'text-gray-500 border-transparent hover:text-gray-300 hover:bg-emerald-500/5'
+            }`}
+          >
+            <Cuboid className="w-4 h-4" />
+            Dessin 3D
+          </button>
+          <button
             onClick={() => setActiveTab('controls')}
             className={`flex items-center gap-2.5 px-5 py-3 font-medium transition-all border-b-2 text-sm uppercase tracking-wider ${
               activeTab === 'controls'
@@ -349,7 +392,7 @@ const Plan: React.FC<PlanProps> = ({ embedded = false }) => {
 
       {activeTab === 'editor' ? (
         <div
-          id="plan-container"
+          id="drawing-container"
           className="flex flex-1 overflow-hidden"
           onMouseMove={handleMouseMove}
           style={{ cursor: isDragging ? 'row-resize' : 'default' }}
@@ -393,14 +436,13 @@ const Plan: React.FC<PlanProps> = ({ embedded = false }) => {
                     onEditorModeChange={setEditorMode}
                     terrain={terrain}
                     terrainPreview={terrainPreview}
+                    thirdModeLabel="Robot IA"
+                    thirdModeValue="robot"
+                    selectedLibraryElement={selectedElement}
                     placedElements={placedElements}
                     elementsMap={elementsMap}
+                    onPlaceElement={handlePlaceElement}
                     onElementDrawingComplete={handleElementDrawingComplete}
-                    isDrawingMode={isDrawingMode}
-                    onStartDrawing={handleStartDrawing}
-                    onAddStroke={handleAddStroke}
-                    onStopDrawing={handleStopDrawing}
-                    onUpdateLivePoints={handleUpdateLivePoints}
                   />
                 </div>
               </div>
@@ -447,15 +489,12 @@ const Plan: React.FC<PlanProps> = ({ embedded = false }) => {
                     onActiveChange={setIs3DActive}
                     terrain={terrain}
                     terrainPreview={terrainPreview}
-                    editorMode={editorMode}
+                    selectedLibraryElement={selectedElement}
                     placedElements={placedElements}
                     elementsMap={elementsMap}
+                    onPlaceElement={handlePlaceElement}
                     onElementDrawingComplete={handleElementDrawingComplete}
-                    isDrawingMode={isDrawingMode}
-                    currentDrawingStrokes={currentDrawingStrokes}
-                    onStartDrawing={handleStartDrawing}
-                    onAddStroke={handleAddStroke}
-                    onUpdateLivePoints={handleUpdateLivePoints}
+                    editorMode={editorMode}
                   />
                 </div>
               </div>
@@ -500,15 +539,118 @@ const Plan: React.FC<PlanProps> = ({ embedded = false }) => {
                 onCreateTerrain={handleCreateTerrain}
                 onPreviewChange={handlePreviewChange}
                 onDeleteTerrain={handleDeleteTerrain}
+                selectedElement={selectedElement}
+                onSelectElement={setSelectedElement}
+                onDrawOnScene={handleDrawOnScene}
               />
+            </div>
+          </div>
+        </div>
+      ) : activeTab === '3d' ? (
+        <div className="flex flex-1 overflow-hidden">
+          <div className="flex-1 flex flex-col p-6">
+            <div className="flex-1 relative rounded-lg overflow-hidden" style={{
+              border: '3px solid #0e7490',
+              boxShadow: '0 0 20px rgba(14, 116, 144, 0.3), inset 0 0 30px rgba(0, 0, 0, 0.5)',
+              background: 'linear-gradient(135deg, #0a0a0a 0%, #111827 50%, #0a0a0a 100%)'
+            }}>
+              <div className="absolute inset-0 rounded-lg" style={{
+                border: '8px solid #1e293b',
+                borderRadius: '0.5rem',
+                pointerEvents: 'none'
+              }}>
+                <div className="absolute inset-0" style={{
+                  border: '2px solid #334155',
+                  borderRadius: '0.25rem'
+                }} />
+              </div>
+              <div className="absolute top-4 left-4 flex items-center gap-2 z-10">
+                <div className={`w-2 h-2 rounded-full ${isAnimation3DPlaying ? 'bg-emerald-500' : 'bg-red-500'} animate-pulse`} />
+                <span className="text-xs text-gray-500 uppercase tracking-wider">Zone Animation 3D</span>
+              </div>
+              <div className="absolute bottom-4 right-4 text-xs text-gray-600 z-10">
+                <span className="font-mono">16:9</span>
+              </div>
+              <Animation3DViewer
+                isPlaying={isAnimation3DPlaying}
+                onComplete={() => setIsAnimation3DPlaying(false)}
+              />
+            </div>
+          </div>
+          <div className="flex flex-shrink-0">
+            <div className="w-72 xl:w-80 border-l border-cyan-500/20 overflow-y-auto bg-[#0a0d14]">
+              <div className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <FolderOpen className="w-5 h-5 text-emerald-400" />
+                  <span className="text-sm font-bold text-white uppercase tracking-wider">Armoire</span>
+                </div>
+                <button
+                  onClick={handlePlayAnimation3D}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/30 transition-all font-semibold text-xs uppercase tracking-wider"
+                >
+                  <Play className="w-4 h-4" />
+                  Lecture
+                </button>
+              </div>
             </div>
           </div>
         </div>
       ) : (
         <ControlsHelp />
       )}
+
+      {showNewElementModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-[#0a1929] border border-cyan-700/30 rounded-2xl w-full max-w-md p-6">
+            <h2 className="text-lg font-bold text-cyan-200 uppercase tracking-wider mb-4">
+              Nouvel Element
+            </h2>
+            <div className="mb-4">
+              <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 block">
+                Nom de l'element
+              </label>
+              <input
+                type="text"
+                value={newElementName}
+                onChange={(e) => setNewElementName(e.target.value)}
+                placeholder="Ex: Lit, Table, Chaise..."
+                className="w-full px-4 py-3 bg-[#071018] border border-cyan-700/30 text-cyan-200 placeholder-gray-600 focus:border-cyan-500/50 outline-none"
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowNewElementModal(false);
+                  setNewElementName('');
+                }}
+                className="flex-1 px-4 py-3 bg-gray-500/20 border border-gray-500/50 text-gray-400 hover:bg-gray-500/30 transition-all font-semibold text-sm uppercase"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleCreateAndRecord}
+                disabled={!newElementName.trim()}
+                className="flex-1 px-4 py-3 bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/30 transition-all font-semibold text-sm uppercase disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Creer et Dessiner
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRecorder && selectedElement && (
+        <DrawingRecorder
+          elementName={selectedElement.name}
+          initialDrawing={selectedElement.drawing_data}
+          onSave={handleSaveDrawing}
+          onCancel={() => setShowRecorder(false)}
+        />
+      )}
+
     </div>
   );
 };
 
-export default Plan;
+export default InteractiveDrawing;

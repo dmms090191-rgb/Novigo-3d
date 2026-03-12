@@ -1,7 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { GridSettings, Wall, Brick, Block } from '../types/Scene';
-import { Sun, Moon, Sunset, CloudSnow, Lock, Unlock, Loader2, Grid3x3 as Grid3X3, Eye, EyeOff, ChevronDown, Video, User } from 'lucide-react';
+import { LibraryElement, ScenePlacedElement, DrawingData } from '../types/ElementLibrary';
+import { Sun, Moon, Sunset, CloudSnow, Lock, Unlock, Loader2, Grid3x3 as Grid3X3, Eye, EyeOff, ChevronDown, Video, User, Pencil } from 'lucide-react';
 import { createRealisticCharacter, createFallbackCharacter, RealisticCharacterController } from './RealisticCharacter';
 import { AtmosphericSkySystem } from './AtmosphericSky';
 import { NightSkySystem } from './NightSky';
@@ -15,6 +16,22 @@ interface TerrainConfig {
   cellSize: number;
 }
 
+type EditorMode = 'navigation' | 'terrain' | 'construction' | 'robot';
+
+interface DrawingPoint {
+  x: number;
+  y: number;
+  timestamp: number;
+}
+
+interface DrawingStroke {
+  points: DrawingPoint[];
+  color: string;
+  width: number;
+  startTime: number;
+  endTime: number;
+}
+
 interface Zone3DProps {
   gridSettings: GridSettings;
   walls: Wall[];
@@ -24,9 +41,40 @@ interface Zone3DProps {
   onActiveChange?: (active: boolean) => void;
   terrain?: TerrainConfig | null;
   terrainPreview?: TerrainConfig | null;
+  selectedLibraryElement?: LibraryElement | null;
+  placedElements?: ScenePlacedElement[];
+  elementsMap?: Map<string, LibraryElement>;
+  onPlaceElement?: (element: LibraryElement, x: number, y: number) => void;
+  onElementDrawingComplete?: (placedElementId: string) => void;
+  editorMode?: EditorMode;
+  isDrawingMode?: boolean;
+  currentDrawingStrokes?: DrawingData | null;
+  onStartDrawing?: () => void;
+  onAddStroke?: (stroke: DrawingStroke) => void;
+  onUpdateLivePoints?: (points: DrawingPoint[]) => void;
 }
 
-const Zone3D: React.FC<Zone3DProps> = ({ gridSettings, walls, blocks, bricks, isActive: isActiveProp = true, onActiveChange, terrain, terrainPreview }) => {
+const Zone3D: React.FC<Zone3DProps> = ({
+  gridSettings,
+  walls,
+  blocks,
+  bricks,
+  isActive: isActiveProp = true,
+  onActiveChange,
+  terrain,
+  terrainPreview,
+  selectedLibraryElement,
+  placedElements = [],
+  elementsMap = new Map(),
+  onPlaceElement,
+  onElementDrawingComplete,
+  editorMode = 'navigation',
+  isDrawingMode = false,
+  currentDrawingStrokes = null,
+  onStartDrawing,
+  onAddStroke,
+  onUpdateLivePoints
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -44,7 +92,24 @@ const Zone3D: React.FC<Zone3DProps> = ({ gridSettings, walls, blocks, bricks, is
   const sunsetSkyRef = useRef<SunsetSkySystem | null>(null);
   const snowStormSkyRef = useRef<SnowStormSkySystem | null>(null);
   const postProcessingRef = useRef<HDRPostProcessing | null>(null);
+  const drawingsGroupRef = useRef<THREE.Group | null>(null);
+  const drawing3DAnimationsRef = useRef<Map<string, { startTime: number; completed: boolean; lines: THREE.Line[]; element: LibraryElement; glowSphere?: THREE.Mesh; glowLight?: THREE.PointLight }>>(new Map());
+  const wardrobeGroupRef = useRef<THREE.Group | null>(null);
+  const wardrobeAnimationRef = useRef<{ startTime: number; completed: boolean; lines: THREE.Line[]; glowSphere?: THREE.Mesh; glowLight?: THREE.PointLight } | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
+  const [isActiveDrawing3D, setIsActiveDrawing3D] = useState(false);
+  const currentStroke3DRef = useRef<DrawingPoint[]>([]);
+  const strokeStartTime3DRef = useRef<number>(0);
+  const drawing2DCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const onStartDrawingRef = useRef(onStartDrawing);
+  const onAddStrokeRef = useRef(onAddStroke);
+  const onUpdateLivePointsRef = useRef(onUpdateLivePoints);
+
+  useEffect(() => {
+    onStartDrawingRef.current = onStartDrawing;
+    onAddStrokeRef.current = onAddStroke;
+    onUpdateLivePointsRef.current = onUpdateLivePoints;
+  }, [onStartDrawing, onAddStroke, onUpdateLivePoints]);
   const [isCharacterLoading, setIsCharacterLoading] = useState(false);
   const [characterLoadError, setCharacterLoadError] = useState<string | null>(null);
   const [isCharacterLoaded, setIsCharacterLoaded] = useState(false);
@@ -69,9 +134,9 @@ const Zone3D: React.FC<Zone3DProps> = ({ gridSettings, walls, blocks, bricks, is
   const currentSpeedLevelRef = useRef(2);
   const [currentZoom, setCurrentZoom] = useState(100);
   const [isOrthographic, setIsOrthographic] = useState(false);
-  const [isViewLocked, setIsViewLocked] = useState(false);
+  const [isViewLocked, setIsViewLocked] = useState(true);
   const isActiveRef = useRef(isActiveProp);
-  const isViewLockedRefLocal = useRef(false);
+  const isViewLockedRefLocal = useRef(true);
   const [isFocused, setIsFocused] = useState(false);
   const isFocusedRef = useRef(false);
   const [sceneColorMode, setSceneColorMode] = useState<'default' | 'navyTech' | 'navyWhite'>('default');
@@ -95,10 +160,20 @@ const Zone3D: React.FC<Zone3DProps> = ({ gridSettings, walls, blocks, bricks, is
   const previewBorderRef = useRef<THREE.LineSegments | null>(null);
   const previewQuadrantsRef = useRef<THREE.Group | null>(null);
   const previewCompassRef = useRef<THREE.Group | null>(null);
+  const selectedLibraryElementRef = useRef<LibraryElement | null>(null);
+  const onPlaceElementRef = useRef<((element: LibraryElement, x: number, y: number) => void) | undefined>(undefined);
 
   useEffect(() => {
     isActiveRef.current = isActiveProp;
   }, [isActiveProp]);
+
+  useEffect(() => {
+    selectedLibraryElementRef.current = selectedLibraryElement || null;
+  }, [selectedLibraryElement]);
+
+  useEffect(() => {
+    onPlaceElementRef.current = onPlaceElement;
+  }, [onPlaceElement]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -284,6 +359,10 @@ const Zone3D: React.FC<Zone3DProps> = ({ gridSettings, walls, blocks, bricks, is
     scene.add(bricksGroup);
     bricksGroupRef.current = bricksGroup;
 
+    const drawingsGroup = new THREE.Group();
+    drawingsGroup.position.y = 0.05;
+    scene.add(drawingsGroup);
+    drawingsGroupRef.current = drawingsGroup;
 
     let isDragging = false;
     let previousMousePosition = { x: 0, y: 0 };
@@ -330,11 +409,9 @@ const Zone3D: React.FC<Zone3DProps> = ({ gridSettings, walls, blocks, bricks, is
     updateCamera();
 
     const onMouseDown = (e: MouseEvent) => {
-      // Si la fenêtre est inactive, ne rien faire
       if (!isActiveRef.current) return;
 
       if (isViewLockedRefLocal.current) {
-        // En mode bloqué: clic gauche OU clic droit pour déplacer
         if (e.button === 0 || e.button === 2) {
           isDragging = true;
           previousMousePosition = { x: e.clientX, y: e.clientY };
@@ -697,8 +774,16 @@ const Zone3D: React.FC<Zone3DProps> = ({ gridSettings, walls, blocks, bricks, is
 
     window.addEventListener('resize', handleResize);
 
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
     return () => {
       window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       renderer.domElement.removeEventListener('mouseenter', handleMouseEnter);
       renderer.domElement.removeEventListener('mouseleave', handleMouseLeave);
       renderer.domElement.removeEventListener('mousedown', onMouseDown);
@@ -897,6 +982,277 @@ const Zone3D: React.FC<Zone3DProps> = ({ gridSettings, walls, blocks, bricks, is
     console.log('✅ Rendu des blocs terminé, total meshes dans le groupe:', blocksGroupRef.current?.children.length);
     console.log('📦 Groupe de blocs:', blocksGroupRef.current);
   }, [blocks, gridSettings.blockSize]);
+
+  useEffect(() => {
+    if (!drawingsGroupRef.current || !sceneRef.current || !sceneReady) return;
+
+    const currentIds = new Set(placedElements.map(e => e.id));
+
+    drawing3DAnimationsRef.current.forEach((anim, id) => {
+      if (!currentIds.has(id)) {
+        anim.lines.forEach(obj => {
+          drawingsGroupRef.current?.remove(obj);
+          if (obj instanceof THREE.Mesh) {
+            obj.geometry.dispose();
+            if (obj.material instanceof THREE.Material) {
+              obj.material.dispose();
+            }
+          }
+        });
+        if (anim.glowSphere) {
+          drawingsGroupRef.current?.remove(anim.glowSphere);
+          anim.glowSphere.geometry.dispose();
+          (anim.glowSphere.material as THREE.Material).dispose();
+        }
+        if (anim.glowLight) {
+          drawingsGroupRef.current?.remove(anim.glowLight);
+        }
+        drawing3DAnimationsRef.current.delete(id);
+      }
+    });
+
+    placedElements.forEach(placedEl => {
+      const element = elementsMap.get(placedEl.elementId);
+      if (!element || !element.drawing_data) return;
+
+      if (!drawing3DAnimationsRef.current.has(placedEl.id)) {
+        console.log('Creating 3D drawing animation for:', placedEl.id, 'at position:', placedEl.x, placedEl.y);
+        const drawing = element.drawing_data;
+        const bbox = drawing.boundingBox;
+        const drawingWidth = bbox.maxX - bbox.minX;
+        const drawingHeight = bbox.maxY - bbox.minY;
+
+        const scale3D = 0.02 * placedEl.scale;
+
+        const centerX = gridSettings.gridWidthMeters / 2;
+        const centerZ = gridSettings.gridLengthMeters / 2;
+
+        const offsetX = (placedEl.x - 400) * 0.025;
+        const offsetZ = (placedEl.y - 300) * 0.025;
+
+        const worldX = centerX + offsetX;
+        const worldZ = centerZ + offsetZ;
+
+        const meshes: THREE.Mesh[] = [];
+
+        drawing.strokes.forEach((stroke, strokeIndex) => {
+          if (stroke.points.length < 2) return;
+
+          const points3D: THREE.Vector3[] = stroke.points.map(point => {
+            const localX = (point.x - bbox.minX - drawingWidth / 2) * scale3D;
+            const localZ = -(point.y - bbox.minY - drawingHeight / 2) * scale3D;
+            return new THREE.Vector3(
+              worldX + localX,
+              0.15,
+              worldZ + localZ
+            );
+          });
+
+          const curve = new THREE.CatmullRomCurve3(points3D);
+          const tubeGeometry = new THREE.TubeGeometry(curve, points3D.length * 2, 0.03, 8, false);
+
+          const material = new THREE.MeshBasicMaterial({
+            color: 0x00ffff,
+            transparent: true,
+            opacity: 0
+          });
+
+          const tubeMesh = new THREE.Mesh(tubeGeometry, material);
+          tubeMesh.userData = {
+            strokeIndex,
+            startTime: stroke.startTime,
+            endTime: stroke.endTime,
+            totalPoints: stroke.points.length,
+            points3D
+          };
+          tubeMesh.visible = false;
+
+          meshes.push(tubeMesh);
+          drawingsGroupRef.current?.add(tubeMesh);
+        });
+
+        const glowGeometry = new THREE.SphereGeometry(0.15, 16, 16);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+          color: 0x00ffff,
+          transparent: true,
+          opacity: 0.9
+        });
+        const glowSphere = new THREE.Mesh(glowGeometry, glowMaterial);
+        glowSphere.visible = false;
+        drawingsGroupRef.current?.add(glowSphere);
+
+        const glowLight = new THREE.PointLight(0x00ffff, 2, 3);
+        glowLight.visible = false;
+        drawingsGroupRef.current?.add(glowLight);
+
+        drawing3DAnimationsRef.current.set(placedEl.id, {
+          startTime: Date.now(),
+          completed: false,
+          lines: meshes as unknown as THREE.Line[],
+          element,
+          glowSphere,
+          glowLight
+        });
+      }
+    });
+  }, [placedElements, elementsMap, gridSettings.gridWidthMeters, gridSettings.gridLengthMeters, sceneReady]);
+
+  useEffect(() => {
+    if (drawing3DAnimationsRef.current.size === 0) return;
+
+    let animationRunning = true;
+    let frameId: number;
+
+    const animate3DDrawings = () => {
+      if (!animationRunning) return;
+
+      const now = Date.now();
+      let hasActiveAnimations = false;
+
+      if (drawing3DAnimationsRef.current.size > 0) {
+        console.log('Animating', drawing3DAnimationsRef.current.size, 'drawings');
+      }
+
+      drawing3DAnimationsRef.current.forEach((anim, placedId) => {
+        if (anim.completed) return;
+
+        const drawing = anim.element.drawing_data;
+        if (!drawing) return;
+
+        const elapsed = now - anim.startTime;
+        const totalDuration = drawing.totalDuration;
+        const progress = Math.min(1, elapsed / totalDuration);
+
+        let currentGlowPos: THREE.Vector3 | null = null;
+        let isActivelyDrawing = false;
+
+        anim.lines.forEach(obj => {
+          const mesh = obj as unknown as THREE.Mesh;
+          const strokeData = mesh.userData;
+          const strokeStart = strokeData.startTime;
+          const strokeEnd = strokeData.endTime;
+          const strokeDuration = strokeEnd - strokeStart;
+
+          if (elapsed >= strokeStart) {
+            const strokeElapsed = elapsed - strokeStart;
+            const strokeProgress = Math.min(1, strokeElapsed / strokeDuration);
+
+            mesh.visible = true;
+
+            const material = mesh.material as THREE.MeshBasicMaterial;
+
+            if (strokeProgress < 1) {
+              material.opacity = 0.9;
+              material.color.setHex(0x00ffff);
+
+              const points3D = strokeData.points3D as THREE.Vector3[];
+              const pointsToShow = Math.max(2, Math.floor(points3D.length * strokeProgress));
+              const partialPoints = points3D.slice(0, pointsToShow);
+
+              if (partialPoints.length >= 2) {
+                const curve = new THREE.CatmullRomCurve3(partialPoints);
+                const newGeometry = new THREE.TubeGeometry(curve, partialPoints.length * 2, 0.03, 8, false);
+                mesh.geometry.dispose();
+                mesh.geometry = newGeometry;
+
+                currentGlowPos = partialPoints[partialPoints.length - 1].clone();
+                isActivelyDrawing = true;
+              }
+            } else {
+              material.opacity = 1;
+              material.color.setHex(0x40e0d0);
+            }
+          }
+        });
+
+        if (anim.glowSphere && anim.glowLight) {
+          if (isActivelyDrawing && currentGlowPos) {
+            anim.glowSphere.visible = true;
+            anim.glowLight.visible = true;
+            anim.glowSphere.position.copy(currentGlowPos);
+            anim.glowLight.position.copy(currentGlowPos);
+
+            const pulse = 1 + Math.sin(now * 0.01) * 0.3;
+            anim.glowSphere.scale.setScalar(pulse);
+            anim.glowLight.intensity = 2 + Math.sin(now * 0.015) * 0.5;
+          } else {
+            anim.glowSphere.visible = false;
+            anim.glowLight.visible = false;
+          }
+        }
+
+        if (progress >= 1) {
+          anim.completed = true;
+          if (anim.glowSphere) anim.glowSphere.visible = false;
+          if (anim.glowLight) anim.glowLight.visible = false;
+          onElementDrawingComplete?.(placedId);
+        } else {
+          hasActiveAnimations = true;
+        }
+      });
+
+      if (hasActiveAnimations) {
+        frameId = requestAnimationFrame(animate3DDrawings);
+      }
+    };
+
+    animate3DDrawings();
+
+    return () => {
+      animationRunning = false;
+      if (frameId) cancelAnimationFrame(frameId);
+    };
+  }, [placedElements, onElementDrawingComplete]);
+
+  const liveDrawingGroupRef = useRef<THREE.Group | null>(null);
+  const [sceneReady3D, setSceneReady3D] = useState(false);
+
+  useEffect(() => {
+    if (sceneRef.current && !liveDrawingGroupRef.current) {
+      liveDrawingGroupRef.current = new THREE.Group();
+      liveDrawingGroupRef.current.position.y = 0.1;
+      sceneRef.current.add(liveDrawingGroupRef.current);
+      setSceneReady3D(true);
+    }
+  }, [sceneReady]);
+
+  useEffect(() => {
+    if (!liveDrawingGroupRef.current) return;
+
+    while (liveDrawingGroupRef.current.children.length > 0) {
+      const child = liveDrawingGroupRef.current.children[0];
+      liveDrawingGroupRef.current.remove(child);
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        if (child.material instanceof THREE.Material) {
+          child.material.dispose();
+        }
+      }
+    }
+
+    if (!currentDrawingStrokes || !currentDrawingStrokes.strokes || currentDrawingStrokes.strokes.length === 0) {
+      return;
+    }
+
+    currentDrawingStrokes.strokes.forEach(stroke => {
+      if (stroke.points.length < 2) return;
+
+      const points3D: THREE.Vector3[] = stroke.points.map(point => {
+        return new THREE.Vector3(point.x, 0.15, point.y);
+      });
+
+      const curve = new THREE.CatmullRomCurve3(points3D);
+      const tubeGeometry = new THREE.TubeGeometry(curve, Math.max(points3D.length * 2, 4), 0.05, 8, false);
+
+      const material = new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        transparent: false
+      });
+
+      const tubeMesh = new THREE.Mesh(tubeGeometry, material);
+      liveDrawingGroupRef.current?.add(tubeMesh);
+    });
+  }, [currentDrawingStrokes, gridSettings.gridWidthMeters, gridSettings.gridLengthMeters, sceneReady3D]);
 
   useEffect(() => {
     if (!wallsGroupRef.current) return;
@@ -1219,6 +1575,253 @@ const Zone3D: React.FC<Zone3DProps> = ({ gridSettings, walls, blocks, bricks, is
       cameraRef.current.lookAt(centerX, 0, centerZ);
     }
   }, [terrain]);
+
+  useEffect(() => {
+    if (!sceneRef.current || !sceneReady || wardrobeAnimationRef.current) return;
+
+    const wardrobeGroup = new THREE.Group();
+    wardrobeGroup.position.set(
+      gridSettings.gridWidthMeters / 2,
+      0.1,
+      gridSettings.gridLengthMeters / 2
+    );
+    sceneRef.current.add(wardrobeGroup);
+    wardrobeGroupRef.current = wardrobeGroup;
+
+    const scale = 2.5;
+    const wardrobePoints: THREE.Vector3[] = [
+      new THREE.Vector3(0.55 * scale, 0.5 * scale, 0.97 * scale),
+      new THREE.Vector3(1.25 * scale, 0.5 * scale, 0.97 * scale),
+      new THREE.Vector3(1.25 * scale, -0.35 * scale, 0.97 * scale),
+      new THREE.Vector3(0.55 * scale, -0.35 * scale, 0.97 * scale),
+      new THREE.Vector3(0.55 * scale, 0.5 * scale, 0.55 * scale),
+      new THREE.Vector3(1.25 * scale, 0.5 * scale, 0.55 * scale),
+      new THREE.Vector3(1.25 * scale, -0.35 * scale, 0.55 * scale),
+      new THREE.Vector3(0.55 * scale, -0.35 * scale, 0.55 * scale),
+      new THREE.Vector3(0.90 * scale, 0.47 * scale, 0.55 * scale),
+      new THREE.Vector3(0.90 * scale, -0.32 * scale, 0.55 * scale),
+      new THREE.Vector3(0.58 * scale, 0.20 * scale, 0.55 * scale),
+      new THREE.Vector3(1.22 * scale, 0.20 * scale, 0.55 * scale),
+      new THREE.Vector3(0.58 * scale, 0.47 * scale, 0.55 * scale),
+      new THREE.Vector3(0.87 * scale, 0.47 * scale, 0.55 * scale),
+      new THREE.Vector3(0.87 * scale, -0.32 * scale, 0.55 * scale),
+      new THREE.Vector3(0.58 * scale, -0.32 * scale, 0.55 * scale),
+      new THREE.Vector3(0.61 * scale, 0.44 * scale, 0.55 * scale),
+      new THREE.Vector3(0.84 * scale, 0.44 * scale, 0.55 * scale),
+      new THREE.Vector3(0.84 * scale, 0.23 * scale, 0.55 * scale),
+      new THREE.Vector3(0.61 * scale, 0.23 * scale, 0.55 * scale),
+      new THREE.Vector3(0.61 * scale, 0.17 * scale, 0.55 * scale),
+      new THREE.Vector3(0.84 * scale, 0.17 * scale, 0.55 * scale),
+      new THREE.Vector3(0.84 * scale, -0.29 * scale, 0.55 * scale),
+      new THREE.Vector3(0.61 * scale, -0.29 * scale, 0.55 * scale),
+      new THREE.Vector3(0.93 * scale, 0.47 * scale, 0.55 * scale),
+      new THREE.Vector3(1.22 * scale, 0.47 * scale, 0.55 * scale),
+      new THREE.Vector3(1.22 * scale, -0.32 * scale, 0.55 * scale),
+      new THREE.Vector3(0.93 * scale, -0.32 * scale, 0.55 * scale),
+      new THREE.Vector3(0.96 * scale, 0.44 * scale, 0.55 * scale),
+      new THREE.Vector3(1.19 * scale, 0.44 * scale, 0.55 * scale),
+      new THREE.Vector3(1.19 * scale, 0.23 * scale, 0.55 * scale),
+      new THREE.Vector3(0.96 * scale, 0.23 * scale, 0.55 * scale),
+      new THREE.Vector3(0.96 * scale, 0.17 * scale, 0.55 * scale),
+      new THREE.Vector3(1.19 * scale, 0.17 * scale, 0.55 * scale),
+      new THREE.Vector3(1.19 * scale, -0.29 * scale, 0.55 * scale),
+      new THREE.Vector3(0.96 * scale, -0.29 * scale, 0.55 * scale),
+      new THREE.Vector3(0.82 * scale, 0.10 * scale, 0.54 * scale),
+      new THREE.Vector3(0.82 * scale, -0.05 * scale, 0.54 * scale),
+      new THREE.Vector3(0.98 * scale, 0.10 * scale, 0.54 * scale),
+      new THREE.Vector3(0.98 * scale, -0.05 * scale, 0.54 * scale),
+      new THREE.Vector3(0.53 * scale, 0.50 * scale, 0.98 * scale),
+      new THREE.Vector3(1.27 * scale, 0.50 * scale, 0.98 * scale),
+      new THREE.Vector3(1.27 * scale, 0.50 * scale, 0.53 * scale),
+      new THREE.Vector3(0.53 * scale, 0.50 * scale, 0.53 * scale),
+      new THREE.Vector3(0.53 * scale, -0.35 * scale, 0.98 * scale),
+      new THREE.Vector3(1.27 * scale, -0.35 * scale, 0.98 * scale),
+      new THREE.Vector3(1.27 * scale, -0.35 * scale, 0.53 * scale),
+      new THREE.Vector3(0.53 * scale, -0.35 * scale, 0.53 * scale),
+      new THREE.Vector3(0.57 * scale, -0.35 * scale, 0.57 * scale),
+      new THREE.Vector3(0.57 * scale, -0.40 * scale, 0.57 * scale),
+      new THREE.Vector3(1.23 * scale, -0.35 * scale, 0.57 * scale),
+      new THREE.Vector3(1.23 * scale, -0.40 * scale, 0.57 * scale),
+    ];
+
+    const continuousPath = [
+      0, 1, 2, 3, 0,
+      -1, 4, 5, 6, 7, 4,
+      -1, 0, 4,
+      -1, 1, 5,
+      -1, 2, 6,
+      -1, 3, 7,
+      -1, 8, 9,
+      -1, 10, 11,
+      -1, 12, 13, 14, 15, 12,
+      -1, 16, 17, 18, 19, 16,
+      -1, 20, 21, 22, 23, 20,
+      -1, 24, 25, 26, 27, 24,
+      -1, 28, 29, 30, 31, 28,
+      -1, 32, 33, 34, 35, 32,
+      -1, 36, 37,
+      -1, 38, 39,
+      -1, 40, 41, 42, 43, 40,
+      -1, 44, 45, 46, 47, 44,
+      -1, 48, 49,
+      -1, 50, 51,
+    ];
+
+    const segments: { from: THREE.Vector3; to: THREE.Vector3 }[] = [];
+    let lastPoint: THREE.Vector3 | null = null;
+
+    for (let i = 0; i < continuousPath.length; i++) {
+      const idx = continuousPath[i];
+      if (idx === -1) {
+        lastPoint = null;
+        continue;
+      }
+      const point = wardrobePoints[idx];
+      if (lastPoint && point) {
+        segments.push({ from: lastPoint.clone(), to: point.clone() });
+      }
+      lastPoint = point;
+    }
+
+    const lines: THREE.Line[] = [];
+    const totalDuration = 5000;
+    const segmentDuration = totalDuration / segments.length;
+
+    segments.forEach((seg, index) => {
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array([
+        seg.from.x, seg.from.y, seg.from.z,
+        seg.from.x, seg.from.y, seg.from.z
+      ]);
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+      const material = new THREE.LineBasicMaterial({
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0.9,
+        linewidth: 2
+      });
+
+      const line = new THREE.Line(geometry, material);
+      line.userData = {
+        fromPoint: seg.from,
+        toPoint: seg.to,
+        startTime: index * segmentDuration,
+        endTime: (index + 1) * segmentDuration
+      };
+      line.visible = false;
+      wardrobeGroup.add(line);
+      lines.push(line);
+    });
+
+    const glowGeometry = new THREE.SphereGeometry(0.15, 16, 16);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00ffff,
+      transparent: true,
+      opacity: 0.8
+    });
+    const glowSphere = new THREE.Mesh(glowGeometry, glowMaterial);
+    glowSphere.visible = false;
+    wardrobeGroup.add(glowSphere);
+
+    const glowLight = new THREE.PointLight(0x00ffff, 2, 3);
+    glowLight.visible = false;
+    wardrobeGroup.add(glowLight);
+
+    wardrobeAnimationRef.current = {
+      startTime: Date.now(),
+      completed: false,
+      lines,
+      glowSphere,
+      glowLight
+    };
+  }, [sceneReady, gridSettings.gridWidthMeters, gridSettings.gridLengthMeters]);
+
+  useEffect(() => {
+    if (!wardrobeAnimationRef.current || wardrobeAnimationRef.current.completed) return;
+
+    let animationId: number;
+    const totalDuration = 5000;
+
+    const animateWardrobe = () => {
+      const anim = wardrobeAnimationRef.current;
+      if (!anim || anim.completed) return;
+
+      const now = Date.now();
+      const elapsed = now - anim.startTime;
+      const progress = Math.min(1, elapsed / totalDuration);
+
+      let currentGlowPos: THREE.Vector3 | null = null;
+      let isActivelyDrawing = false;
+
+      anim.lines.forEach(line => {
+        const userData = line.userData;
+        const segStartTime = userData.startTime;
+        const segEndTime = userData.endTime;
+        const segDuration = segEndTime - segStartTime;
+
+        if (elapsed >= segStartTime) {
+          line.visible = true;
+          const segElapsed = elapsed - segStartTime;
+          const segProgress = Math.min(1, segElapsed / segDuration);
+
+          const fromPoint = userData.fromPoint as THREE.Vector3;
+          const toPoint = userData.toPoint as THREE.Vector3;
+
+          const currentX = fromPoint.x + (toPoint.x - fromPoint.x) * segProgress;
+          const currentY = fromPoint.y + (toPoint.y - fromPoint.y) * segProgress;
+          const currentZ = fromPoint.z + (toPoint.z - fromPoint.z) * segProgress;
+
+          const positions = line.geometry.attributes.position.array as Float32Array;
+          positions[3] = currentX;
+          positions[4] = currentY;
+          positions[5] = currentZ;
+          line.geometry.attributes.position.needsUpdate = true;
+
+          if (segProgress < 1) {
+            currentGlowPos = new THREE.Vector3(currentX, currentY, currentZ);
+            isActivelyDrawing = true;
+            const material = line.material as THREE.LineBasicMaterial;
+            material.color.setHex(0x00ffff);
+          } else {
+            const material = line.material as THREE.LineBasicMaterial;
+            material.color.setHex(0x40e0d0);
+            material.opacity = 1;
+          }
+        }
+      });
+
+      if (anim.glowSphere && anim.glowLight) {
+        if (isActivelyDrawing && currentGlowPos) {
+          anim.glowSphere.visible = true;
+          anim.glowLight.visible = true;
+          anim.glowSphere.position.copy(currentGlowPos);
+          anim.glowLight.position.copy(currentGlowPos);
+
+          const pulse = 1 + Math.sin(now * 0.01) * 0.3;
+          anim.glowSphere.scale.setScalar(pulse);
+          anim.glowLight.intensity = 2 + Math.sin(now * 0.015) * 0.5;
+        } else {
+          anim.glowSphere.visible = false;
+          anim.glowLight.visible = false;
+        }
+      }
+
+      if (progress >= 1) {
+        anim.completed = true;
+        if (anim.glowSphere) anim.glowSphere.visible = false;
+        if (anim.glowLight) anim.glowLight.visible = false;
+      } else {
+        animationId = requestAnimationFrame(animateWardrobe);
+      }
+    };
+
+    animateWardrobe();
+
+    return () => {
+      if (animationId) cancelAnimationFrame(animationId);
+    };
+  }, [sceneReady]);
 
   useEffect(() => {
     console.log('Zone3D preview effect:', { sceneReady, terrainPreview, terrain, hasScene: !!sceneRef.current });
@@ -1632,6 +2235,139 @@ const Zone3D: React.FC<Zone3DProps> = ({ gridSettings, walls, blocks, bricks, is
       previewGridRef.current.visible = isGridVisible;
     }
   }, [isGridVisible]);
+
+  const raycaster3DRef = useRef<THREE.Raycaster>(new THREE.Raycaster());
+  const groundPlane3DRef = useRef<THREE.Plane>(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
+  const liveDrawing3DLocalGroupRef = useRef<THREE.Group | null>(null);
+  const currentStroke3DWorldPointsRef = useRef<THREE.Vector3[]>([]);
+  const currentLine3DMeshRef = useRef<THREE.Mesh | null>(null);
+
+  useEffect(() => {
+    if (sceneRef.current && !liveDrawing3DLocalGroupRef.current) {
+      liveDrawing3DLocalGroupRef.current = new THREE.Group();
+      liveDrawing3DLocalGroupRef.current.position.y = 0.1;
+      sceneRef.current.add(liveDrawing3DLocalGroupRef.current);
+    }
+  }, [sceneReady]);
+
+  const getWorldPosition3D = (clientX: number, clientY: number): THREE.Vector3 | null => {
+    if (!containerRef.current || !cameraRef.current) return null;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+
+    raycaster3DRef.current.setFromCamera(mouse, cameraRef.current);
+    const intersectPoint = new THREE.Vector3();
+    raycaster3DRef.current.ray.intersectPlane(groundPlane3DRef.current, intersectPoint);
+
+    return intersectPoint;
+  };
+
+  const updateLiveStroke3DMesh = () => {
+    if (!liveDrawing3DLocalGroupRef.current) return;
+
+    if (currentLine3DMeshRef.current) {
+      liveDrawing3DLocalGroupRef.current.remove(currentLine3DMeshRef.current);
+      currentLine3DMeshRef.current.geometry.dispose();
+      (currentLine3DMeshRef.current.material as THREE.Material).dispose();
+      currentLine3DMeshRef.current = null;
+    }
+
+    const points = currentStroke3DWorldPointsRef.current;
+    if (points.length < 2) return;
+
+    const curve = new THREE.CatmullRomCurve3(points);
+    const tubeGeometry = new THREE.TubeGeometry(curve, Math.max(points.length * 2, 8), 0.05, 8, false);
+    const material = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+    const tubeMesh = new THREE.Mesh(tubeGeometry, material);
+
+    liveDrawing3DLocalGroupRef.current.add(tubeMesh);
+    currentLine3DMeshRef.current = tubeMesh;
+  };
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+
+      const worldPos = getWorldPosition3D(e.clientX, e.clientY);
+      if (!worldPos) return;
+
+      setIsActiveDrawing3D(true);
+      strokeStartTime3DRef.current = Date.now();
+      currentStroke3DWorldPointsRef.current = [worldPos.clone()];
+      currentStroke3DRef.current = [{ x: worldPos.x, y: worldPos.z, timestamp: 0 }];
+
+      if (onStartDrawingRef.current) {
+        onStartDrawingRef.current();
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isActiveDrawing3D) return;
+
+      const worldPos = getWorldPosition3D(e.clientX, e.clientY);
+      if (!worldPos) return;
+
+      const lastPoint = currentStroke3DWorldPointsRef.current[currentStroke3DWorldPointsRef.current.length - 1];
+      if (lastPoint && worldPos.distanceTo(lastPoint) < 0.1) return;
+
+      const timestamp = Date.now() - strokeStartTime3DRef.current;
+      currentStroke3DWorldPointsRef.current.push(worldPos.clone());
+      currentStroke3DRef.current.push({ x: worldPos.x, y: worldPos.z, timestamp });
+
+      updateLiveStroke3DMesh();
+
+      if (onUpdateLivePointsRef.current && currentStroke3DRef.current.length >= 2) {
+        onUpdateLivePointsRef.current([...currentStroke3DRef.current]);
+      }
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      if (e.button !== 1 || !isActiveDrawing3D) return;
+
+      setIsActiveDrawing3D(false);
+
+      if (currentStroke3DRef.current.length >= 2 && onAddStrokeRef.current) {
+        const endTime = Date.now() - strokeStartTime3DRef.current;
+        const stroke: DrawingStroke = {
+          points: currentStroke3DRef.current,
+          color: '#00ffff',
+          width: 3,
+          startTime: 0,
+          endTime
+        };
+        onAddStrokeRef.current(stroke);
+      }
+
+      currentStroke3DRef.current = [];
+      currentStroke3DWorldPointsRef.current = [];
+    };
+
+    const preventMiddleClickScroll = (e: MouseEvent) => {
+      if (e.button === 1) {
+        e.preventDefault();
+      }
+    };
+
+    container.addEventListener('mousedown', handleMouseDown);
+    container.addEventListener('mousemove', handleMouseMove);
+    container.addEventListener('mouseup', handleMouseUp);
+    container.addEventListener('auxclick', preventMiddleClickScroll);
+
+    return () => {
+      container.removeEventListener('mousedown', handleMouseDown);
+      container.removeEventListener('mousemove', handleMouseMove);
+      container.removeEventListener('mouseup', handleMouseUp);
+      container.removeEventListener('auxclick', preventMiddleClickScroll);
+    };
+  }, [isActiveDrawing3D]);
 
   return (
     <div ref={containerRef} className="w-full h-full bg-[#0a0d14] relative">
@@ -2075,6 +2811,7 @@ const Zone3D: React.FC<Zone3DProps> = ({ gridSettings, walls, blocks, bricks, is
           <span className="text-xs text-amber-400 font-mono">{characterLoadError}</span>
         </div>
       )}
+
     </div>
   );
 };

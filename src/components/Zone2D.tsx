@@ -1,9 +1,11 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { GridSettings, Wall, Brick, Block, TerrainCell, TerrainType } from '../types/Scene';
-import { Sun, Moon, Lock, Unlock, Navigation, Hammer, Box, ChevronDown, Mountain, Grid3x3 } from 'lucide-react';
+import { Sun, Moon, Lock, Unlock, Navigation, Hammer, Box, ChevronDown, Mountain, Grid3x3, Pencil } from 'lucide-react';
+import { LibraryElement, ScenePlacedElement, DrawingStroke, DrawingPoint } from '../types/ElementLibrary';
+import SceneElementPlayer from './SceneElementPlayer';
 
-type EditorMode = 'navigation' | 'terrain' | 'construction';
+type EditorMode = 'navigation' | 'terrain' | 'construction' | 'robot';
 
 interface TerrainConfig {
   width: number;
@@ -31,13 +33,37 @@ interface Zone2DProps {
   onEditorModeChange: (mode: EditorMode) => void;
   terrain: TerrainConfig | null;
   terrainPreview?: TerrainConfig | null;
+  thirdModeLabel?: string;
+  thirdModeValue?: 'construction' | 'robot';
+  selectedLibraryElement?: LibraryElement | null;
+  placedElements?: ScenePlacedElement[];
+  elementsMap?: Map<string, LibraryElement>;
+  onPlaceElement?: (element: LibraryElement, x: number, y: number) => void;
+  onElementDrawingComplete?: (placedElementId: string) => void;
+  isDrawingMode?: boolean;
+  onStartDrawing?: () => void;
+  onAddStroke?: (stroke: DrawingStroke) => void;
+  onStopDrawing?: () => void;
+  onUpdateLivePoints?: (points: DrawingPoint[]) => void;
 }
 
 const Zone2D: React.FC<Zone2DProps> = ({
   gridSettings, walls, blocks, bricks, terrainCells,
   onAddBlock, onRemoveBlock, onAddTerrainCell, onRemoveTerrainCell,
   isActive: isActiveProp = true, onActiveChange,
-  editorMode, onEditorModeChange, terrain, terrainPreview
+  editorMode, onEditorModeChange, terrain, terrainPreview,
+  thirdModeLabel = 'Construction',
+  thirdModeValue = 'construction',
+  selectedLibraryElement,
+  placedElements = [],
+  elementsMap = new Map(),
+  onPlaceElement,
+  onElementDrawingComplete,
+  isDrawingMode = false,
+  onStartDrawing,
+  onAddStroke,
+  onStopDrawing,
+  onUpdateLivePoints
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -85,19 +111,38 @@ const Zone2D: React.FC<Zone2DProps> = ({
   const editorModeRef = useRef<EditorMode>('navigation');
   const selectedToolRef = useRef<'block' | null>(null);
   const selectedTerrainTypeRef = useRef<TerrainType>('grass');
+  const selectedLibraryElementRef = useRef<LibraryElement | null>(null);
+  const onPlaceElementRef = useRef<((element: LibraryElement, x: number, y: number) => void) | undefined>(undefined);
   const terrainGroupRef = useRef<THREE.Group | null>(null);
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
-  const [isToolMenuOpen, setIsToolMenuOpen] = useState(false);
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [isAmbianceMenuOpen, setIsAmbianceMenuOpen] = useState(false);
   const modeMenuRef = useRef<HTMLDivElement>(null);
-  const toolMenuRef = useRef<HTMLDivElement>(null);
   const themeMenuRef = useRef<HTMLDivElement>(null);
   const ambianceMenuRef = useRef<HTMLDivElement>(null);
   const [sceneColorMode, setSceneColorMode] = useState<'default' | 'navyTech' | 'navyWhite'>('default');
   const [ambiance, setAmbiance] = useState<'white' | 'black' | 'navyBlue' | 'nightBlue'>('black');
   const [cameraPosition, setCameraPosition] = useState<{ x: number; z: number }>({ x: 0, z: 0 });
   const [isTopView, setIsTopView] = useState(true);
+
+  const [isActiveDrawing, setIsActiveDrawing] = useState(false);
+  const currentStrokeRef = useRef<DrawingPoint[]>([]);
+  const strokeStartTimeRef = useRef<number>(0);
+  const onAddStrokeRef = useRef(onAddStroke);
+  const onStopDrawingRef = useRef(onStopDrawing);
+  const onUpdateLivePointsRef = useRef(onUpdateLivePoints);
+
+  useEffect(() => {
+    onAddStrokeRef.current = onAddStroke;
+  }, [onAddStroke]);
+
+  useEffect(() => {
+    onStopDrawingRef.current = onStopDrawing;
+  }, [onStopDrawing]);
+
+  useEffect(() => {
+    onUpdateLivePointsRef.current = onUpdateLivePoints;
+  }, [onUpdateLivePoints]);
 
   const terrainMeshRef = useRef<THREE.Mesh | null>(null);
   const terrainGridRef = useRef<THREE.GridHelper | null>(null);
@@ -133,12 +178,17 @@ const Zone2D: React.FC<Zone2DProps> = ({
   }, [selectedTerrainType]);
 
   useEffect(() => {
+    selectedLibraryElementRef.current = selectedLibraryElement || null;
+  }, [selectedLibraryElement]);
+
+  useEffect(() => {
+    onPlaceElementRef.current = onPlaceElement;
+  }, [onPlaceElement]);
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (modeMenuRef.current && !modeMenuRef.current.contains(event.target as Node)) {
         setIsModeMenuOpen(false);
-      }
-      if (toolMenuRef.current && !toolMenuRef.current.contains(event.target as Node)) {
-        setIsToolMenuOpen(false);
       }
       if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
         setIsThemeMenuOpen(false);
@@ -148,11 +198,11 @@ const Zone2D: React.FC<Zone2DProps> = ({
       }
     };
 
-    if (isModeMenuOpen || isToolMenuOpen || isThemeMenuOpen || isAmbianceMenuOpen) {
+    if (isModeMenuOpen || isThemeMenuOpen || isAmbianceMenuOpen) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [isModeMenuOpen, isToolMenuOpen, isThemeMenuOpen, isAmbianceMenuOpen]);
+  }, [isModeMenuOpen, isThemeMenuOpen, isAmbianceMenuOpen]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -274,24 +324,17 @@ const Zone2D: React.FC<Zone2DProps> = ({
         return;
       }
 
-      if (isViewLockedRefLocal.current && editorModeRef.current === 'construction' && e.button === 0) {
-        console.log('Clic détecté en mode construction');
-        console.log('Outil sélectionné:', selectedToolRef.current);
-        console.log('📷 Position caméra:', cameraRef.current?.position);
+      if (isViewLockedRefLocal.current && (editorModeRef.current === 'construction' || editorModeRef.current === 'robot') && e.button === 0) {
         const gridPos = getBlockGridPosition(e.clientX, e.clientY);
-        console.log('Position grille:', gridPos);
 
         if (gridPos && selectedToolRef.current === 'block') {
           const existingBlock = blocks.find(b => b.gridX === gridPos.gridX && b.gridZ === gridPos.gridZ);
-          console.log('Bloc existant?', existingBlock);
 
           if (!existingBlock) {
-            // Capturer l'image de la caméra
             let imageUrl: string | undefined;
             if (rendererRef.current && sceneRef.current && cameraRef.current) {
               rendererRef.current.render(sceneRef.current, cameraRef.current);
               imageUrl = rendererRef.current.domElement.toDataURL('image/png');
-              console.log('📸 Zone2D - Image capturée:', imageUrl.substring(0, 50) + '...');
             }
 
             const newBlock: Block = {
@@ -301,14 +344,13 @@ const Zone2D: React.FC<Zone2DProps> = ({
               height: gridSettings.wallHeight,
               imageUrl: imageUrl
             };
-            console.log('✅ Zone2D - Création du bloc avec image:', newBlock);
             onAddBlock(newBlock);
           }
         }
         return;
       }
 
-      if (isViewLockedRefLocal.current && editorModeRef.current === 'construction' && e.button === 2) {
+      if (isViewLockedRefLocal.current && (editorModeRef.current === 'construction' || editorModeRef.current === 'robot') && e.button === 2) {
         const gridPos = getBlockGridPosition(e.clientX, e.clientY);
         if (gridPos) {
           const blockToRemove = blocks.find(b => b.gridX === gridPos.gridX && b.gridZ === gridPos.gridZ);
@@ -394,7 +436,7 @@ const Zone2D: React.FC<Zone2DProps> = ({
         return;
       }
 
-      if (isViewLockedRefLocal.current && !isDragging && editorModeRef.current === 'construction') {
+      if (isViewLockedRefLocal.current && !isDragging && (editorModeRef.current === 'construction' || editorModeRef.current === 'robot')) {
         const gridPos = getBlockGridPosition(e.clientX, e.clientY);
         if (gridPos) {
           setHoveredBlock(gridPos);
@@ -735,8 +777,16 @@ const Zone2D: React.FC<Zone2DProps> = ({
 
     window.addEventListener('resize', handleResize);
 
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
     return () => {
       window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       renderer.domElement.removeEventListener('mouseenter', handleMouseEnter);
       renderer.domElement.removeEventListener('mouseleave', handleMouseLeave);
       renderer.domElement.removeEventListener('mousedown', onMouseDown);
@@ -1541,6 +1591,144 @@ const Zone2D: React.FC<Zone2DProps> = ({
     }
   }, [ambiance]);
 
+  const onStartDrawingRef = useRef(onStartDrawing);
+  useEffect(() => {
+    onStartDrawingRef.current = onStartDrawing;
+  }, [onStartDrawing]);
+
+  const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster());
+  const groundPlaneForRaycast = useRef<THREE.Plane>(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
+  const liveDrawing3DGroupRef = useRef<THREE.Group | null>(null);
+  const currentStroke3DPointsRef = useRef<THREE.Vector3[]>([]);
+  const currentLineMeshRef = useRef<THREE.Mesh | null>(null);
+
+  useEffect(() => {
+    if (sceneRef.current && !liveDrawing3DGroupRef.current) {
+      liveDrawing3DGroupRef.current = new THREE.Group();
+      liveDrawing3DGroupRef.current.position.y = 0.1;
+      sceneRef.current.add(liveDrawing3DGroupRef.current);
+    }
+  }, [terrain]);
+
+  const getWorldPosition = useCallback((clientX: number, clientY: number): THREE.Vector3 | null => {
+    if (!containerRef.current || !cameraRef.current) return null;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+
+    raycasterRef.current.setFromCamera(mouse, cameraRef.current);
+    const intersectPoint = new THREE.Vector3();
+    raycasterRef.current.ray.intersectPlane(groundPlaneForRaycast.current, intersectPoint);
+
+    return intersectPoint;
+  }, []);
+
+  const updateLiveStrokeMesh = useCallback(() => {
+    if (!liveDrawing3DGroupRef.current) return;
+
+    if (currentLineMeshRef.current) {
+      liveDrawing3DGroupRef.current.remove(currentLineMeshRef.current);
+      currentLineMeshRef.current.geometry.dispose();
+      (currentLineMeshRef.current.material as THREE.Material).dispose();
+      currentLineMeshRef.current = null;
+    }
+
+    const points = currentStroke3DPointsRef.current;
+    if (points.length < 2) return;
+
+    const curve = new THREE.CatmullRomCurve3(points);
+    const tubeGeometry = new THREE.TubeGeometry(curve, Math.max(points.length * 2, 8), 0.05, 8, false);
+    const material = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+    const tubeMesh = new THREE.Mesh(tubeGeometry, material);
+
+    liveDrawing3DGroupRef.current.add(tubeMesh);
+    currentLineMeshRef.current = tubeMesh;
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+
+      const worldPos = getWorldPosition(e.clientX, e.clientY);
+      if (!worldPos) return;
+
+      setIsActiveDrawing(true);
+      strokeStartTimeRef.current = Date.now();
+      currentStroke3DPointsRef.current = [worldPos.clone()];
+      currentStrokeRef.current = [{ x: worldPos.x, y: worldPos.z, timestamp: 0 }];
+
+      if (onStartDrawingRef.current) {
+        onStartDrawingRef.current();
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isActiveDrawing) return;
+
+      const worldPos = getWorldPosition(e.clientX, e.clientY);
+      if (!worldPos) return;
+
+      const lastPoint = currentStroke3DPointsRef.current[currentStroke3DPointsRef.current.length - 1];
+      if (lastPoint && worldPos.distanceTo(lastPoint) < 0.1) return;
+
+      const timestamp = Date.now() - strokeStartTimeRef.current;
+      currentStroke3DPointsRef.current.push(worldPos.clone());
+      currentStrokeRef.current.push({ x: worldPos.x, y: worldPos.z, timestamp });
+
+      updateLiveStrokeMesh();
+
+      if (onUpdateLivePointsRef.current && currentStrokeRef.current.length >= 2) {
+        onUpdateLivePointsRef.current([...currentStrokeRef.current]);
+      }
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      if (e.button !== 1 || !isActiveDrawing) return;
+
+      setIsActiveDrawing(false);
+
+      if (currentStrokeRef.current.length >= 2 && onAddStrokeRef.current) {
+        const endTime = Date.now() - strokeStartTimeRef.current;
+        const stroke: DrawingStroke = {
+          points: currentStrokeRef.current,
+          color: '#00ffff',
+          width: 3,
+          startTime: 0,
+          endTime
+        };
+        onAddStrokeRef.current(stroke);
+      }
+
+      currentStrokeRef.current = [];
+      currentStroke3DPointsRef.current = [];
+    };
+
+    const preventMiddleClickScroll = (e: MouseEvent) => {
+      if (e.button === 1) {
+        e.preventDefault();
+      }
+    };
+
+    container.addEventListener('mousedown', handleMouseDown);
+    container.addEventListener('mousemove', handleMouseMove);
+    container.addEventListener('mouseup', handleMouseUp);
+    container.addEventListener('auxclick', preventMiddleClickScroll);
+
+    return () => {
+      container.removeEventListener('mousedown', handleMouseDown);
+      container.removeEventListener('mousemove', handleMouseMove);
+      container.removeEventListener('mouseup', handleMouseUp);
+      container.removeEventListener('auxclick', preventMiddleClickScroll);
+    };
+  }, [isActiveDrawing, getWorldPosition, updateLiveStrokeMesh]);
+
   return (
     <div ref={containerRef} className="w-full h-full bg-[#0a0d14] relative">
       <div className="absolute inset-0 pointer-events-none z-10">
@@ -1621,7 +1809,7 @@ const Zone2D: React.FC<Zone2DProps> = ({
               >
                 {editorMode === 'navigation' ? (
                   <Navigation className="w-3.5 h-3.5" />
-                ) : editorMode === 'construction' ? (
+                ) : editorMode === 'construction' || editorMode === 'robot' ? (
                   <Hammer className="w-3.5 h-3.5" />
                 ) : (
                   <Mountain className="w-3.5 h-3.5" />
@@ -1662,15 +1850,15 @@ const Zone2D: React.FC<Zone2DProps> = ({
 
                   <button
                     onClick={() => {
-                      onEditorModeChange('construction');
+                      onEditorModeChange(thirdModeValue);
                       setIsModeMenuOpen(false);
                     }}
                     className={`flex items-center gap-3 w-full px-4 py-3 text-xs font-mono uppercase tracking-wider transition-colors ${
-                      editorMode === 'construction' ? 'bg-cyan-500/20 text-cyan-400 border-l-2 border-cyan-400' : 'text-gray-400 hover:bg-cyan-500/10 hover:text-cyan-400'
+                      editorMode === thirdModeValue ? 'bg-cyan-500/20 text-cyan-400 border-l-2 border-cyan-400' : 'text-gray-400 hover:bg-cyan-500/10 hover:text-cyan-400'
                     }`}
                   >
                     <Hammer className="w-4 h-4" />
-                    <span>Construction</span>
+                    <span>{thirdModeLabel}</span>
                   </button>
                 </div>
               )}
@@ -1678,67 +1866,6 @@ const Zone2D: React.FC<Zone2DProps> = ({
 
             <div className="h-6 w-px bg-cyan-500/20"></div>
 
-            {editorMode === 'navigation' && (
-              <>
-                <div className="px-3 py-2 bg-[#0a0d14] border border-cyan-500/20">
-                  <span className="text-[10px] text-cyan-500/70 font-mono uppercase">WASD: Move | Wheel: Zoom</span>
-                </div>
-
-                {isViewLocked && (
-                  <div className="px-3 py-2 bg-[#0a0d14] border border-emerald-500/30">
-                    <span className="text-[10px] text-emerald-400 font-mono">BLOCK: {(gridSettings.blockSize * 100).toFixed(0)}cm</span>
-                  </div>
-                )}
-              </>
-            )}
-
-            {editorMode === 'construction' && (
-              <>
-                <div className="relative" ref={toolMenuRef}>
-                  <button
-                    onClick={() => setIsToolMenuOpen(!isToolMenuOpen)}
-                    className={`flex items-center gap-2 px-3 py-2 font-medium transition-all text-xs uppercase tracking-wider ${
-                      selectedTool === 'block'
-                        ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-400'
-                        : 'bg-[#0a0d14] border border-cyan-500/30 text-gray-400 hover:text-cyan-400'
-                    }`}
-                  >
-                    <Box className="w-3.5 h-3.5" />
-                    <span>{selectedTool === 'block' ? 'Bloc' : 'Outil'}</span>
-                    <ChevronDown className={`w-3 h-3 transition-transform ${isToolMenuOpen ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {isToolMenuOpen && (
-                    <div className="absolute top-full mt-1 left-0 bg-[#0a0d14] border border-cyan-500/30 shadow-2xl z-50 min-w-[180px] overflow-hidden">
-                      <button
-                        onClick={() => {
-                          setSelectedTool('block');
-                          setIsToolMenuOpen(false);
-                        }}
-                        className={`flex items-center gap-3 w-full px-4 py-3 text-xs font-mono uppercase tracking-wider transition-colors ${
-                          selectedTool === 'block' ? 'bg-emerald-500/20 text-emerald-400 border-l-2 border-emerald-400' : 'text-gray-400 hover:bg-cyan-500/10 hover:text-cyan-400'
-                        }`}
-                      >
-                        <Box className="w-4 h-4" />
-                        <span>Bloc</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {selectedTool === 'block' && (
-                  <div className="px-3 py-2 bg-[#0a0d14] border border-cyan-500/20">
-                    <span className="text-[10px] text-cyan-500/70 font-mono uppercase">LMB: Place | RMB: Remove</span>
-                  </div>
-                )}
-
-                {isViewLocked && (
-                  <div className="px-3 py-2 bg-[#0a0d14] border border-emerald-500/30">
-                    <span className="text-[10px] text-emerald-400 font-mono">BLOCK: {(gridSettings.blockSize * 100).toFixed(0)}cm</span>
-                  </div>
-                )}
-              </>
-            )}
 
             <div className="h-6 w-px bg-cyan-500/20"></div>
 
@@ -1973,6 +2100,17 @@ const Zone2D: React.FC<Zone2DProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {placedElements.length > 0 && (
+        <SceneElementPlayer
+          placedElements={placedElements}
+          elements={elementsMap}
+          canvasWidth={containerRef.current?.clientWidth || 800}
+          canvasHeight={containerRef.current?.clientHeight || 600}
+          onDrawingComplete={onElementDrawingComplete}
+          zoom={1}
+        />
       )}
 
     </div>
