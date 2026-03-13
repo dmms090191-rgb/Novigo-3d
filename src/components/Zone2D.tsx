@@ -766,13 +766,21 @@ const Zone2D: React.FC<Zone2DProps> = ({
     };
     animate();
 
+    let resizeTimeout: number | null = null;
     const handleResize = () => {
-      if (!containerRef.current || !cameraRef.current || !rendererRef.current) return;
-      const width = containerRef.current.clientWidth;
-      const height = containerRef.current.clientHeight;
-      cameraRef.current.aspect = width / height;
-      cameraRef.current.updateProjectionMatrix();
-      rendererRef.current.setSize(width, height);
+      if (resizeTimeout) {
+        cancelAnimationFrame(resizeTimeout);
+      }
+      resizeTimeout = requestAnimationFrame(() => {
+        if (!containerRef.current || !cameraRef.current || !rendererRef.current) return;
+        const width = containerRef.current.clientWidth;
+        const height = containerRef.current.clientHeight;
+        if (width <= 0 || height <= 0) return;
+        cameraRef.current.aspect = width / height;
+        cameraRef.current.updateProjectionMatrix();
+        rendererRef.current.setSize(width, height, false);
+        resizeTimeout = null;
+      });
     };
 
     window.addEventListener('resize', handleResize);

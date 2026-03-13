@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="roof" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="wall1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0ea5e9"/>
+    </linearGradient>
+    <linearGradient id="wall2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+  </defs>
+  <polygon points="32,4 58,24 32,20 6,24" fill="url(#roof)"/>
+  <polygon points="6,24 32,20 32,56 6,48" fill="url(#wall1)"/>
+  <polygon points="32,20 58,24 58,48 32,56" fill="url(#wall2)"/>
+  <rect x="22" y="36" width="8" height="12" rx="1" fill="#fff" opacity="0.9"/>
+  <rect x="34" y="36" width="8" height="12" rx="1" fill="#e0f2fe" opacity="0.8"/>
+  <circle cx="50" cy="12" r="4" fill="#fbbf24"/>
+  <path d="M50 8 L50 4 M54 12 L58 12 M50 16 L50 18 M46 12 L44 12 M53 9 L55 7 M53 15 L55 17 M47 9 L45 7 M47 15 L45 17" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

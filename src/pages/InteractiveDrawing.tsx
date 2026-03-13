@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Layers, Box, HelpCircle, Activity, Cpu, Monitor, Eye, Save, Plus, Cuboid, FolderOpen, Play } from 'lucide-react';
+import { ArrowLeft, Layers, Box, HelpCircle, Activity, Cpu, Monitor, Eye, Save, Plus, Cuboid, FolderOpen, Play, ChevronLeft, ChevronRight } from 'lucide-react';
 import Zone2D from '../components/Zone2D';
 import Zone3D from '../components/Zone3D';
 import Zone3Params from '../components/Zone3Params';
@@ -30,6 +30,7 @@ const InteractiveDrawing: React.FC<InteractiveDrawingProps> = ({ embedded = fals
   const [terrainPreview, setTerrainPreview] = useState<TerrainConfig | null>(null);
   const [is2DMinimized, setIs2DMinimized] = useState(false);
   const [is3DMinimized, setIs3DMinimized] = useState(false);
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isInitialLoadRef = useRef(true);
@@ -56,6 +57,13 @@ const InteractiveDrawing: React.FC<InteractiveDrawingProps> = ({ embedded = fals
   const [showNewElementModal, setShowNewElementModal] = useState(false);
   const [isAnimation3DPlaying, setIsAnimation3DPlaying] = useState(false);
   const [animation3DDrawingData, setAnimation3DDrawingData] = useState<DrawingData | null>(null);
+  const [isArmoireSelected, setIsArmoireSelected] = useState(false);
+  const [notification, setNotification] = useState<{ message: string; type: 'error' | 'success' | 'warning' } | null>(null);
+
+  const showNotification = useCallback((message: string, type: 'error' | 'success' | 'warning' = 'error') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  }, []);
 
   useEffect(() => {
     const loadScene = async () => {
@@ -285,13 +293,32 @@ const InteractiveDrawing: React.FC<InteractiveDrawingProps> = ({ embedded = fals
   };
 
   const handlePlayAnimation3D = useCallback(async () => {
+    if (!isArmoireSelected) {
+      showNotification('Veuillez selectionner un element avant de lancer la construction', 'warning');
+      return;
+    }
     setIsAnimation3DPlaying(false);
     await new Promise(resolve => setTimeout(resolve, 50));
     setIsAnimation3DPlaying(true);
-  }, []);
+  }, [isArmoireSelected, showNotification]);
+
+  useEffect(() => {
+    if (activeTab !== '3d') {
+      setIsAnimation3DPlaying(false);
+    }
+  }, [activeTab]);
 
   return (
     <div className={`${embedded ? 'h-[calc(100vh-5rem)]' : 'h-screen'} w-full bg-[#0a0d14] flex flex-col overflow-hidden`}>
+      {notification && (
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[9999] px-6 py-3 rounded-lg shadow-2xl flex items-center gap-3 animate-pulse ${
+          notification.type === 'error' ? 'bg-red-600' :
+          notification.type === 'warning' ? 'bg-amber-600' :
+          'bg-emerald-600'
+        }`}>
+          <span className="text-white font-medium">{notification.message}</span>
+        </div>
+      )}
       {!embedded && (
         <div className="relative bg-[#0f1318] px-6 py-3 flex-shrink-0 border-b border-cyan-500/20">
           <div className="absolute inset-0 bg-tech-grid opacity-20"></div>
@@ -525,24 +552,37 @@ const InteractiveDrawing: React.FC<InteractiveDrawingProps> = ({ embedded = fals
             )}
           </div>
 
-          <div className="flex flex-shrink-0">
-            <div className="w-72 xl:w-80 border-l border-cyan-500/20 overflow-y-auto">
-              <Zone3Params
-                gridSettings={gridSettings}
-                walls={walls}
-                blocks={blocks}
-                bricks={bricks}
-                onGridSettingsChange={setGridSettings}
-                onClearAll={handleClearAll}
-                editorMode={editorMode}
-                terrain={terrain}
-                onCreateTerrain={handleCreateTerrain}
-                onPreviewChange={handlePreviewChange}
-                onDeleteTerrain={handleDeleteTerrain}
-                selectedElement={selectedElement}
-                onSelectElement={setSelectedElement}
-                onDrawOnScene={handleDrawOnScene}
-              />
+          <div className="flex flex-shrink-0 relative">
+            <button
+              onClick={() => setIsRightPanelCollapsed(!isRightPanelCollapsed)}
+              className="absolute -left-4 top-1/2 -translate-y-1/2 z-50 flex items-center justify-center w-4 h-16 bg-[#0a0d14] border border-cyan-500/30 hover:border-cyan-400/50 rounded-l-lg transition-colors group"
+              title={isRightPanelCollapsed ? 'Afficher le panneau' : 'Masquer le panneau'}
+            >
+              {isRightPanelCollapsed ? (
+                <ChevronLeft className="w-4 h-4 text-cyan-400 group-hover:text-cyan-300" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-cyan-400 group-hover:text-cyan-300" />
+              )}
+            </button>
+            <div className={`transition-all duration-300 ease-out overflow-hidden ${isRightPanelCollapsed ? 'w-0' : 'w-72 xl:w-80'}`}>
+              <div className="w-72 xl:w-80 border-l border-cyan-500/20 overflow-y-auto h-full">
+                <Zone3Params
+                  gridSettings={gridSettings}
+                  walls={walls}
+                  blocks={blocks}
+                  bricks={bricks}
+                  onGridSettingsChange={setGridSettings}
+                  onClearAll={handleClearAll}
+                  editorMode={editorMode}
+                  terrain={terrain}
+                  onCreateTerrain={handleCreateTerrain}
+                  onPreviewChange={handlePreviewChange}
+                  onDeleteTerrain={handleDeleteTerrain}
+                  selectedElement={selectedElement}
+                  onSelectElement={setSelectedElement}
+                  onDrawOnScene={handleDrawOnScene}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -574,23 +614,43 @@ const InteractiveDrawing: React.FC<InteractiveDrawingProps> = ({ embedded = fals
               <Animation3DViewer
                 isPlaying={isAnimation3DPlaying}
                 onComplete={() => setIsAnimation3DPlaying(false)}
+                onPlay={handlePlayAnimation3D}
               />
             </div>
           </div>
-          <div className="flex flex-shrink-0">
-            <div className="w-72 xl:w-80 border-l border-cyan-500/20 overflow-y-auto bg-[#0a0d14]">
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <FolderOpen className="w-5 h-5 text-emerald-400" />
-                  <span className="text-sm font-bold text-white uppercase tracking-wider">Armoire</span>
+          <div className="flex flex-shrink-0 relative">
+            <button
+              onClick={() => setIsRightPanelCollapsed(!isRightPanelCollapsed)}
+              className="absolute -left-4 top-1/2 -translate-y-1/2 z-50 flex items-center justify-center w-4 h-16 bg-[#0a0d14] border border-cyan-500/30 hover:border-cyan-400/50 rounded-l-lg transition-colors group"
+              title={isRightPanelCollapsed ? 'Afficher le panneau' : 'Masquer le panneau'}
+            >
+              {isRightPanelCollapsed ? (
+                <ChevronLeft className="w-4 h-4 text-cyan-400 group-hover:text-cyan-300" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-cyan-400 group-hover:text-cyan-300" />
+              )}
+            </button>
+            <div className={`transition-all duration-300 ease-out overflow-hidden ${isRightPanelCollapsed ? 'w-0' : 'w-72 xl:w-80'}`}>
+              <div className="w-72 xl:w-80 border-l border-cyan-500/20 overflow-y-auto bg-[#0a0d14] h-full">
+                <div className="p-4">
+                  <div
+                    onClick={() => setIsArmoireSelected(!isArmoireSelected)}
+                    className={`relative flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all duration-200 ${
+                      isArmoireSelected
+                        ? 'bg-emerald-500/10 border-2 border-emerald-500/50'
+                        : 'hover:bg-slate-800/50 border-2 border-transparent'
+                    }`}
+                  >
+                    {isArmoireSelected && (
+                      <div className="absolute inset-0 rounded-lg bg-emerald-500/5 pointer-events-none" />
+                    )}
+                    <FolderOpen className={`w-5 h-5 ${isArmoireSelected ? 'text-emerald-400' : 'text-emerald-400/70'}`} />
+                    <span className={`text-sm font-bold uppercase tracking-wider ${isArmoireSelected ? 'text-emerald-400' : 'text-white'}`}>Armoire</span>
+                    {isArmoireSelected && (
+                      <div className="ml-auto w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    )}
+                  </div>
                 </div>
-                <button
-                  onClick={handlePlayAnimation3D}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/30 transition-all font-semibold text-xs uppercase tracking-wider"
-                >
-                  <Play className="w-4 h-4" />
-                  Lecture
-                </button>
               </div>
             </div>
           </div>

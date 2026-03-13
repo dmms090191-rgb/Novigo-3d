@@ -262,17 +262,33 @@ export class HDRPostProcessing {
     }
 
     setSize(width: number, height: number): void {
+        if (width <= 0 || height <= 0) return;
+        if (width === this.width && height === this.height) return;
+
         this.width = width;
         this.height = height;
 
-        this.renderTargetA.setSize(width, height);
-        this.renderTargetB.setSize(width, height);
-        this.renderTargetBright.setSize(width / 2, height / 2);
-        this.renderTargetBlurH.setSize(width / 2, height / 2);
-        this.renderTargetBlurV.setSize(width / 2, height / 2);
+        const rtOptions = {
+            minFilter: THREE.LinearFilter,
+            magFilter: THREE.LinearFilter,
+            format: THREE.RGBAFormat,
+            type: THREE.HalfFloatType,
+        };
 
-        this.blurMaterialH.uniforms.resolution.value.set(width / 2, height / 2);
-        this.blurMaterialV.uniforms.resolution.value.set(width / 2, height / 2);
+        this.renderTargetA.dispose();
+        this.renderTargetB.dispose();
+        this.renderTargetBright.dispose();
+        this.renderTargetBlurH.dispose();
+        this.renderTargetBlurV.dispose();
+
+        this.renderTargetA = new THREE.WebGLRenderTarget(width, height, rtOptions);
+        this.renderTargetB = new THREE.WebGLRenderTarget(width, height, rtOptions);
+        this.renderTargetBright = new THREE.WebGLRenderTarget(Math.max(1, Math.floor(width / 2)), Math.max(1, Math.floor(height / 2)), rtOptions);
+        this.renderTargetBlurH = new THREE.WebGLRenderTarget(Math.max(1, Math.floor(width / 2)), Math.max(1, Math.floor(height / 2)), rtOptions);
+        this.renderTargetBlurV = new THREE.WebGLRenderTarget(Math.max(1, Math.floor(width / 2)), Math.max(1, Math.floor(height / 2)), rtOptions);
+
+        this.blurMaterialH.uniforms.resolution.value.set(Math.max(1, width / 2), Math.max(1, height / 2));
+        this.blurMaterialV.uniforms.resolution.value.set(Math.max(1, width / 2), Math.max(1, height / 2));
     }
 
     dispose(): void {

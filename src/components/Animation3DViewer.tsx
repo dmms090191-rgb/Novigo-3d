@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Loader2, Pause, Play, Box, Rotate3d, SkipForward, RefreshCw, RotateCcw, Pipette, Plus, X, Save, Trash2 } from 'lucide-react';
+import { Loader2, Pause, Play, Box, Rotate3d, SkipForward, RefreshCw, RotateCcw, Pipette, Plus, X, Save, Trash2, ChevronUp, ChevronDown, Grid3x3, Hammer, Ruler, Square, Palette } from 'lucide-react';
 
 interface Point3D {
   x: number;
@@ -21,12 +21,14 @@ interface Particle {
 interface Animation3DViewerProps {
   isPlaying: boolean;
   onComplete?: () => void;
+  onPlay?: () => void;
 }
 
 const SPEED_OPTIONS = [
   { label: 'x1', value: 1 },
   { label: 'x2', value: 2 },
   { label: 'x4', value: 4 },
+  { label: 'x8', value: 8 },
 ];
 
 interface SavedColor {
@@ -49,9 +51,128 @@ const hexToRgb = (hex: string): { r: number; g: number; b: number } => {
   } : { r: 200, g: 200, b: 200 };
 };
 
+const generateArmoirePoints = (lengthCm: number, widthCm: number, heightCm: number): Point3D[] => {
+  const baseWidth = 140;
+  const baseLength = 60;
+  const baseHeight = 200;
+  const scaleX = widthCm / baseWidth;
+  const scaleZ = lengthCm / baseLength;
+  const scaleY = heightCm / baseHeight;
+
+  const basePoints: Point3D[] = [
+    { x: -0.7, y: -0.9, z: -0.3 },
+    { x: 0.7, y: -0.9, z: -0.3 },
+    { x: 0.7, y: -0.9, z: 0.3 },
+    { x: -0.7, y: -0.9, z: 0.3 },
+    { x: -0.7, y: 0.9, z: -0.3 },
+    { x: 0.7, y: 0.9, z: -0.3 },
+    { x: 0.7, y: 0.9, z: 0.3 },
+    { x: -0.7, y: 0.9, z: 0.3 },
+    { x: -0.75, y: 0.9, z: -0.35 },
+    { x: 0.75, y: 0.9, z: -0.35 },
+    { x: 0.75, y: 0.9, z: 0.35 },
+    { x: -0.75, y: 0.9, z: 0.35 },
+    { x: -0.75, y: 0.95, z: -0.35 },
+    { x: 0.75, y: 0.95, z: -0.35 },
+    { x: 0.75, y: 0.95, z: 0.35 },
+    { x: -0.75, y: 0.95, z: 0.35 },
+    { x: -0.72, y: -0.9, z: -0.32 },
+    { x: 0.72, y: -0.9, z: -0.32 },
+    { x: 0.72, y: -0.9, z: 0.32 },
+    { x: -0.72, y: -0.9, z: 0.32 },
+    { x: -0.72, y: -0.95, z: -0.32 },
+    { x: 0.72, y: -0.95, z: -0.32 },
+    { x: 0.72, y: -0.95, z: 0.32 },
+    { x: -0.72, y: -0.95, z: 0.32 },
+    { x: -0.65, y: -0.95, z: -0.25 },
+    { x: -0.65, y: -1.0, z: -0.25 },
+    { x: 0.65, y: -0.95, z: -0.25 },
+    { x: 0.65, y: -1.0, z: -0.25 },
+    { x: -0.65, y: -0.95, z: 0.25 },
+    { x: -0.65, y: -1.0, z: 0.25 },
+    { x: 0.65, y: -0.95, z: 0.25 },
+    { x: 0.65, y: -1.0, z: 0.25 },
+    { x: 0.0, y: 0.87, z: -0.29 },
+    { x: 0.0, y: -0.87, z: -0.29 },
+    { x: 0.0, y: 0.87, z: 0.29 },
+    { x: 0.0, y: -0.87, z: 0.29 },
+    { x: -0.67, y: 0.4, z: -0.28 },
+    { x: -0.03, y: 0.4, z: -0.28 },
+    { x: -0.03, y: 0.4, z: 0.28 },
+    { x: -0.67, y: 0.4, z: 0.28 },
+    { x: 0.03, y: 0.4, z: -0.28 },
+    { x: 0.67, y: 0.4, z: -0.28 },
+    { x: 0.67, y: 0.4, z: 0.28 },
+    { x: 0.03, y: 0.4, z: 0.28 },
+    { x: -0.67, y: -0.2, z: -0.28 },
+    { x: -0.03, y: -0.2, z: -0.28 },
+    { x: -0.03, y: -0.2, z: 0.28 },
+    { x: -0.67, y: -0.2, z: 0.28 },
+    { x: 0.03, y: -0.2, z: -0.28 },
+    { x: 0.67, y: -0.2, z: -0.28 },
+    { x: 0.67, y: -0.2, z: 0.28 },
+    { x: 0.03, y: -0.2, z: 0.28 },
+    { x: -0.67, y: 0.87, z: -0.30 },
+    { x: -0.03, y: 0.87, z: -0.30 },
+    { x: -0.03, y: -0.87, z: -0.30 },
+    { x: -0.67, y: -0.87, z: -0.30 },
+    { x: -0.63, y: 0.80, z: -0.31 },
+    { x: -0.07, y: 0.80, z: -0.31 },
+    { x: -0.07, y: 0.20, z: -0.31 },
+    { x: -0.63, y: 0.20, z: -0.31 },
+    { x: -0.63, y: 0.10, z: -0.31 },
+    { x: -0.07, y: 0.10, z: -0.31 },
+    { x: -0.07, y: -0.80, z: -0.31 },
+    { x: -0.63, y: -0.80, z: -0.31 },
+    { x: 0.03, y: 0.87, z: -0.30 },
+    { x: 0.67, y: 0.87, z: -0.30 },
+    { x: 0.67, y: -0.87, z: -0.30 },
+    { x: 0.03, y: -0.87, z: -0.30 },
+    { x: 0.07, y: 0.80, z: -0.31 },
+    { x: 0.63, y: 0.80, z: -0.31 },
+    { x: 0.63, y: 0.20, z: -0.31 },
+    { x: 0.07, y: 0.20, z: -0.31 },
+    { x: 0.07, y: 0.10, z: -0.31 },
+    { x: 0.63, y: 0.10, z: -0.31 },
+    { x: 0.63, y: -0.80, z: -0.31 },
+    { x: 0.07, y: -0.80, z: -0.31 },
+    { x: -0.10, y: 0.10, z: -0.33 },
+    { x: -0.10, y: -0.10, z: -0.33 },
+    { x: -0.08, y: 0.10, z: -0.35 },
+    { x: -0.08, y: -0.10, z: -0.35 },
+    { x: 0.10, y: 0.10, z: -0.33 },
+    { x: 0.10, y: -0.10, z: -0.33 },
+    { x: 0.08, y: 0.10, z: -0.35 },
+    { x: 0.08, y: -0.10, z: -0.35 },
+    { x: -0.68, y: 0.88, z: -0.29 },
+    { x: -0.68, y: 0.88, z: 0.29 },
+    { x: -0.68, y: -0.88, z: 0.29 },
+    { x: -0.68, y: -0.88, z: -0.29 },
+    { x: 0.68, y: 0.88, z: -0.29 },
+    { x: 0.68, y: 0.88, z: 0.29 },
+    { x: 0.68, y: -0.88, z: 0.29 },
+    { x: 0.68, y: -0.88, z: -0.29 },
+    { x: -0.69, y: 0.88, z: 0.29 },
+    { x: 0.69, y: 0.88, z: 0.29 },
+    { x: 0.69, y: -0.88, z: 0.29 },
+    { x: -0.69, y: -0.88, z: 0.29 },
+    { x: -0.60, y: 0.75, z: -0.20 },
+    { x: -0.60, y: 0.75, z: 0.20 },
+    { x: 0.60, y: 0.75, z: -0.20 },
+    { x: 0.60, y: 0.75, z: 0.20 },
+  ];
+
+  return basePoints.map(p => ({
+    x: p.x * scaleX,
+    y: p.y * scaleY,
+    z: p.z * scaleZ
+  }));
+};
+
 const Animation3DViewer: React.FC<Animation3DViewerProps> = ({
   isPlaying,
   onComplete,
+  onPlay,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -68,7 +189,7 @@ const Animation3DViewer: React.FC<Animation3DViewerProps> = ({
   const speedRef = useRef(1);
 
   const [isSceneReady, setIsSceneReady] = useState(false);
-  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const dimensionsRef = useRef({ width: 0, height: 0 });
   const [selectedSpeed, setSelectedSpeed] = useState(1);
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
@@ -90,25 +211,60 @@ const Animation3DViewer: React.FC<Animation3DViewerProps> = ({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [savedColors, setSavedColors] = useState<(SavedColor | null)[]>([null, null, null]);
   const colorInputRef = useRef<HTMLInputElement>(null);
+  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false);
+  const [isBottomBarCollapsed, setIsBottomBarCollapsed] = useState(false);
+  const [activePanel, setActivePanel] = useState<'armoireColor' | 'dimension' | 'interior' | 'exterior' | 'background' | null>(null);
+  const [armoireDimensions, setArmoireDimensions] = useState({ length: 60, width: 140, height: 200 });
+  const armoireDimensionsRef = useRef({ length: 60, width: 140, height: 200 });
+  const [dimensionInputs, setDimensionInputs] = useState({ length: '60', width: '140', height: '200' });
+  const [interiorLineColor, setInteriorLineColor] = useState('#6B7280');
+  const interiorLineColorRef = useRef('#6B7280');
+  const [interiorLineWidth, setInteriorLineWidth] = useState(1);
+  const interiorLineWidthRef = useRef(1);
+  const [interiorSavedColors, setInteriorSavedColors] = useState<(SavedColor | null)[]>([null, null, null]);
+  const interiorColorInputRef = useRef<HTMLInputElement>(null);
+
+  const [exteriorLineColor, setExteriorLineColor] = useState('#64748B');
+  const exteriorLineColorRef = useRef('#64748B');
+  const [exteriorLineWidth, setExteriorLineWidth] = useState(1);
+  const exteriorLineWidthRef = useRef(1);
+  const [exteriorSavedColors, setExteriorSavedColors] = useState<(SavedColor | null)[]>([null, null, null]);
+  const exteriorColorInputRef = useRef<HTMLInputElement>(null);
+  const [backgroundColor, setBackgroundColor] = useState('#050a15');
+  const backgroundColorRef = useRef('#050a15');
+  const [backgroundSavedColors, setBackgroundSavedColors] = useState<(SavedColor | null)[]>([null, null, null]);
+  const backgroundColorInputRef = useRef<HTMLInputElement>(null);
+
+  const initialBaseScaleRef = useRef<number | null>(null);
+  const initialCenterRef = useRef<{ x: number; y: number } | null>(null);
+  const initialCanvasSizeRef = useRef<{ width: number; height: number } | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
     const updateDimensions = () => {
       if (containerRef.current) {
-        setDimensions({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight,
-        });
+        const width = containerRef.current.clientWidth;
+        const height = containerRef.current.clientHeight;
+        if (width > 0 && height > 0) {
+          dimensionsRef.current = { width, height };
+        }
       }
     };
 
     updateDimensions();
     window.addEventListener('resize', updateDimensions);
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateDimensions();
+    });
+    resizeObserver.observe(containerRef.current);
+
     setIsSceneReady(true);
 
     return () => {
       window.removeEventListener('resize', updateDimensions);
+      resizeObserver.disconnect();
     };
   }, []);
 
@@ -127,11 +283,15 @@ const Animation3DViewer: React.FC<Animation3DViewerProps> = ({
     return () => {
       canvas.removeEventListener('wheel', handleWheelEvent);
     };
-  }, [dimensions]);
+  }, []);
 
   useEffect(() => {
     if (!isSceneReady || !isPlaying || hasStartedRef.current) return;
-    if (dimensions.width === 0 || dimensions.height === 0) return;
+    if (!containerRef.current) return;
+
+    const containerWidth = containerRef.current.clientWidth;
+    const containerHeight = containerRef.current.clientHeight;
+    if (containerWidth === 0 || containerHeight === 0) return;
 
     hasStartedRef.current = true;
     const canvas = canvasRef.current;
@@ -140,156 +300,35 @@ const Animation3DViewer: React.FC<Animation3DViewerProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const { width, height } = dimensions;
-    const centerX = width / 2;
-    const centerY = height / 2;
-    const baseScale = Math.min(width, height) * 0.28;
+    if (!initialCanvasSizeRef.current) {
+      initialCanvasSizeRef.current = { width: containerWidth, height: containerHeight };
+    }
+    if (!initialCenterRef.current) {
+      initialCenterRef.current = { x: containerWidth / 2, y: containerHeight / 2 };
+    }
 
-    const armoirePoints: Point3D[] = [
-      // Structure principale - cadre exterieur (0-7)
-      { x: -0.7, y: -0.9, z: -0.3 },  // 0: bas avant gauche
-      { x: 0.7, y: -0.9, z: -0.3 },   // 1: bas avant droit
-      { x: 0.7, y: -0.9, z: 0.3 },    // 2: bas arriere droit
-      { x: -0.7, y: -0.9, z: 0.3 },   // 3: bas arriere gauche
-      { x: -0.7, y: 0.9, z: -0.3 },   // 4: haut avant gauche
-      { x: 0.7, y: 0.9, z: -0.3 },    // 5: haut avant droit
-      { x: 0.7, y: 0.9, z: 0.3 },     // 6: haut arriere droit
-      { x: -0.7, y: 0.9, z: 0.3 },    // 7: haut arriere gauche
+    const fixedWidth = initialCanvasSizeRef.current.width;
+    const fixedHeight = initialCanvasSizeRef.current.height;
+    const fixedBaseScale = 150;
 
-      // Corniche haute (8-15)
-      { x: -0.75, y: 0.9, z: -0.35 },  // 8
-      { x: 0.75, y: 0.9, z: -0.35 },   // 9
-      { x: 0.75, y: 0.9, z: 0.35 },    // 10
-      { x: -0.75, y: 0.9, z: 0.35 },   // 11
-      { x: -0.75, y: 0.95, z: -0.35 }, // 12
-      { x: 0.75, y: 0.95, z: -0.35 },  // 13
-      { x: 0.75, y: 0.95, z: 0.35 },   // 14
-      { x: -0.75, y: 0.95, z: 0.35 },  // 15
+    canvas.width = fixedWidth;
+    canvas.height = fixedHeight;
 
-      // Plinthe basse (16-23)
-      { x: -0.72, y: -0.9, z: -0.32 },  // 16
-      { x: 0.72, y: -0.9, z: -0.32 },   // 17
-      { x: 0.72, y: -0.9, z: 0.32 },    // 18
-      { x: -0.72, y: -0.9, z: 0.32 },   // 19
-      { x: -0.72, y: -0.95, z: -0.32 }, // 20
-      { x: 0.72, y: -0.95, z: -0.32 },  // 21
-      { x: 0.72, y: -0.95, z: 0.32 },   // 22
-      { x: -0.72, y: -0.95, z: 0.32 },  // 23
+    const getDimensions = () => {
+      return {
+        width: fixedWidth,
+        height: fixedHeight,
+        centerX: fixedWidth / 2,
+        centerY: fixedHeight / 2,
+        baseScale: fixedBaseScale
+      };
+    };
 
-      // Pieds (24-31)
-      { x: -0.65, y: -0.95, z: -0.25 }, // 24
-      { x: -0.65, y: -1.0, z: -0.25 },  // 25
-      { x: 0.65, y: -0.95, z: -0.25 },  // 26
-      { x: 0.65, y: -1.0, z: -0.25 },   // 27
-      { x: -0.65, y: -0.95, z: 0.25 },  // 28
-      { x: -0.65, y: -1.0, z: 0.25 },   // 29
-      { x: 0.65, y: -0.95, z: 0.25 },   // 30
-      { x: 0.65, y: -1.0, z: 0.25 },    // 31
-
-      // Separation centrale verticale (32-35)
-      { x: 0.0, y: 0.87, z: -0.29 },   // 32
-      { x: 0.0, y: -0.87, z: -0.29 },  // 33
-      { x: 0.0, y: 0.87, z: 0.29 },    // 34
-      { x: 0.0, y: -0.87, z: 0.29 },   // 35
-
-      // Etagere haute interieur gauche (36-39)
-      { x: -0.67, y: 0.4, z: -0.28 },  // 36
-      { x: -0.03, y: 0.4, z: -0.28 },  // 37
-      { x: -0.03, y: 0.4, z: 0.28 },   // 38
-      { x: -0.67, y: 0.4, z: 0.28 },   // 39
-
-      // Etagere haute interieur droite (40-43)
-      { x: 0.03, y: 0.4, z: -0.28 },   // 40
-      { x: 0.67, y: 0.4, z: -0.28 },   // 41
-      { x: 0.67, y: 0.4, z: 0.28 },    // 42
-      { x: 0.03, y: 0.4, z: 0.28 },    // 43
-
-      // Etagere basse interieur gauche (44-47)
-      { x: -0.67, y: -0.2, z: -0.28 }, // 44
-      { x: -0.03, y: -0.2, z: -0.28 }, // 45
-      { x: -0.03, y: -0.2, z: 0.28 },  // 46
-      { x: -0.67, y: -0.2, z: 0.28 },  // 47
-
-      // Etagere basse interieur droite (48-51)
-      { x: 0.03, y: -0.2, z: -0.28 },  // 48
-      { x: 0.67, y: -0.2, z: -0.28 },  // 49
-      { x: 0.67, y: -0.2, z: 0.28 },   // 50
-      { x: 0.03, y: -0.2, z: 0.28 },   // 51
-
-      // Porte gauche - cadre (52-55)
-      { x: -0.67, y: 0.87, z: -0.30 },  // 52
-      { x: -0.03, y: 0.87, z: -0.30 },  // 53
-      { x: -0.03, y: -0.87, z: -0.30 }, // 54
-      { x: -0.67, y: -0.87, z: -0.30 }, // 55
-
-      // Porte gauche - panneau decoratif haut (56-59)
-      { x: -0.63, y: 0.80, z: -0.31 },  // 56
-      { x: -0.07, y: 0.80, z: -0.31 },  // 57
-      { x: -0.07, y: 0.20, z: -0.31 },  // 58
-      { x: -0.63, y: 0.20, z: -0.31 },  // 59
-
-      // Porte gauche - panneau decoratif bas (60-63)
-      { x: -0.63, y: 0.10, z: -0.31 },  // 60
-      { x: -0.07, y: 0.10, z: -0.31 },  // 61
-      { x: -0.07, y: -0.80, z: -0.31 }, // 62
-      { x: -0.63, y: -0.80, z: -0.31 }, // 63
-
-      // Porte droite - cadre (64-67)
-      { x: 0.03, y: 0.87, z: -0.30 },   // 64
-      { x: 0.67, y: 0.87, z: -0.30 },   // 65
-      { x: 0.67, y: -0.87, z: -0.30 },  // 66
-      { x: 0.03, y: -0.87, z: -0.30 },  // 67
-
-      // Porte droite - panneau decoratif haut (68-71)
-      { x: 0.07, y: 0.80, z: -0.31 },   // 68
-      { x: 0.63, y: 0.80, z: -0.31 },   // 69
-      { x: 0.63, y: 0.20, z: -0.31 },   // 70
-      { x: 0.07, y: 0.20, z: -0.31 },   // 71
-
-      // Porte droite - panneau decoratif bas (72-75)
-      { x: 0.07, y: 0.10, z: -0.31 },   // 72
-      { x: 0.63, y: 0.10, z: -0.31 },   // 73
-      { x: 0.63, y: -0.80, z: -0.31 },  // 74
-      { x: 0.07, y: -0.80, z: -0.31 },  // 75
-
-      // Poignee porte gauche (76-79)
-      { x: -0.10, y: 0.10, z: -0.33 },  // 76
-      { x: -0.10, y: -0.10, z: -0.33 }, // 77
-      { x: -0.08, y: 0.10, z: -0.35 },  // 78
-      { x: -0.08, y: -0.10, z: -0.35 }, // 79
-
-      // Poignee porte droite (80-83)
-      { x: 0.10, y: 0.10, z: -0.33 },   // 80
-      { x: 0.10, y: -0.10, z: -0.33 },  // 81
-      { x: 0.08, y: 0.10, z: -0.35 },   // 82
-      { x: 0.08, y: -0.10, z: -0.35 },  // 83
-
-      // Panneau lateral gauche interieur (84-87)
-      { x: -0.68, y: 0.88, z: -0.29 },  // 84
-      { x: -0.68, y: 0.88, z: 0.29 },   // 85
-      { x: -0.68, y: -0.88, z: 0.29 },  // 86
-      { x: -0.68, y: -0.88, z: -0.29 }, // 87
-
-      // Panneau lateral droit interieur (88-91)
-      { x: 0.68, y: 0.88, z: -0.29 },   // 88
-      { x: 0.68, y: 0.88, z: 0.29 },    // 89
-      { x: 0.68, y: -0.88, z: 0.29 },   // 90
-      { x: 0.68, y: -0.88, z: -0.29 },  // 91
-
-      // Fond armoire (92-95)
-      { x: -0.69, y: 0.88, z: 0.29 },   // 92
-      { x: 0.69, y: 0.88, z: 0.29 },    // 93
-      { x: 0.69, y: -0.88, z: 0.29 },   // 94
-      { x: -0.69, y: -0.88, z: 0.29 },  // 95
-
-      // Tringle vetements gauche (96-97)
-      { x: -0.60, y: 0.75, z: -0.20 },  // 96
-      { x: -0.60, y: 0.75, z: 0.20 },   // 97
-
-      // Tringle vetements droite (98-99)
-      { x: 0.60, y: 0.75, z: -0.20 },   // 98
-      { x: 0.60, y: 0.75, z: 0.20 },    // 99
-    ];
+    const getArmoirePoints = () => generateArmoirePoints(
+      armoireDimensionsRef.current.length,
+      armoireDimensionsRef.current.width,
+      armoireDimensionsRef.current.height
+    );
 
     const continuousPath = [
       // Structure principale - base
@@ -388,6 +427,15 @@ const Animation3DViewer: React.FC<Animation3DViewerProps> = ({
       -1, 98, 99,
     ];
 
+    const interiorPointIndices = new Set([
+      32, 33, 34, 35,
+      36, 37, 38, 39,
+      40, 41, 42, 43,
+      44, 45, 46, 47,
+      48, 49, 50, 51,
+      96, 97, 98, 99,
+    ]);
+
     drawProgressRef.current = 0;
     particlesRef.current = [];
     trailPointsRef.current = [];
@@ -417,7 +465,7 @@ const Animation3DViewer: React.FC<Animation3DViewerProps> = ({
       };
     };
 
-    const project = (point: Point3D, currentScale: number): { x: number; y: number; depth: number } => {
+    const project = (point: Point3D, currentScale: number, centerX: number, centerY: number): { x: number; y: number; depth: number } => {
       const perspective = 3;
       const factor = perspective / (perspective + point.z);
       return {
@@ -437,11 +485,13 @@ const Animation3DViewer: React.FC<Animation3DViewerProps> = ({
         return;
       }
 
+      const { width, height, centerX, centerY, baseScale } = getDimensions();
+
       const speedMultiplier = speedRef.current;
       timeRef.current += 0.004 * speedMultiplier;
       const time = timeRef.current;
 
-      ctx.fillStyle = '#050a15';
+      ctx.fillStyle = backgroundColorRef.current;
       ctx.fillRect(0, 0, width, height);
 
       let baseRotationY: number;
@@ -460,13 +510,14 @@ const Animation3DViewer: React.FC<Animation3DViewerProps> = ({
 
       const currentScale = baseScale * zoomRef.current;
 
+      const armoirePoints = getArmoirePoints();
       const transformedPoints = armoirePoints.map((point) => {
         const rotatedY = rotateY(point, baseRotationY);
         const rotatedXY = rotateX(rotatedY, baseRotationX);
         return rotatedXY;
       });
 
-      const projectedPoints = transformedPoints.map((point) => project(point, currentScale));
+      const projectedPoints = transformedPoints.map((point) => project(point, currentScale, centerX, centerY));
 
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -598,8 +649,9 @@ const Animation3DViewer: React.FC<Animation3DViewerProps> = ({
           ctx.stroke();
         });
 
-        ctx.strokeStyle = 'rgba(100, 100, 110, 0.3)';
-        ctx.lineWidth = 1;
+        const exteriorColor = hexToRgb(exteriorLineColorRef.current);
+        ctx.strokeStyle = `rgba(${exteriorColor.r}, ${exteriorColor.g}, ${exteriorColor.b}, 0.5)`;
+        ctx.lineWidth = exteriorLineWidthRef.current;
         ctx.beginPath();
         let isFirstPoint = true;
 
@@ -611,6 +663,11 @@ const Animation3DViewer: React.FC<Animation3DViewerProps> = ({
             continue;
           }
 
+          if (interiorPointIndices.has(idx)) {
+            isFirstPoint = true;
+            continue;
+          }
+
           const point = projectedPoints[idx];
           if (isFirstPoint) {
             ctx.moveTo(point.x, point.y);
@@ -618,6 +675,47 @@ const Animation3DViewer: React.FC<Animation3DViewerProps> = ({
           } else {
             ctx.lineTo(point.x, point.y);
           }
+        }
+        ctx.stroke();
+
+        const interiorColor = hexToRgb(interiorLineColorRef.current);
+        ctx.strokeStyle = `rgba(${interiorColor.r}, ${interiorColor.g}, ${interiorColor.b}, 0.6)`;
+        ctx.lineWidth = interiorLineWidthRef.current;
+        ctx.beginPath();
+        isFirstPoint = true;
+        let lastWasInterior = false;
+
+        for (let i = 0; i < continuousPath.length; i++) {
+          const idx = continuousPath[i];
+
+          if (idx === -1) {
+            if (lastWasInterior) {
+              ctx.stroke();
+              ctx.beginPath();
+            }
+            isFirstPoint = true;
+            lastWasInterior = false;
+            continue;
+          }
+
+          if (!interiorPointIndices.has(idx)) {
+            if (lastWasInterior) {
+              ctx.stroke();
+              ctx.beginPath();
+            }
+            isFirstPoint = true;
+            lastWasInterior = false;
+            continue;
+          }
+
+          const point = projectedPoints[idx];
+          if (isFirstPoint) {
+            ctx.moveTo(point.x, point.y);
+            isFirstPoint = false;
+          } else {
+            ctx.lineTo(point.x, point.y);
+          }
+          lastWasInterior = true;
         }
         ctx.stroke();
 
@@ -958,7 +1056,7 @@ const Animation3DViewer: React.FC<Animation3DViewerProps> = ({
     return () => {
       cancelAnimationFrame(animationRef.current);
     };
-  }, [isSceneReady, isPlaying, dimensions, onComplete]);
+  }, [isSceneReady, isPlaying, onComplete]);
 
   useEffect(() => {
     if (!isPlaying) {
@@ -1067,15 +1165,903 @@ const Animation3DViewer: React.FC<Animation3DViewerProps> = ({
     isMaterializedRef.current = newValue;
   };
 
+  const handleDimensionChange = (dimension: 'length' | 'width' | 'height', value: number) => {
+    const clampedValue = Math.max(1, value);
+    const newDimensions = { ...armoireDimensions, [dimension]: clampedValue };
+    setArmoireDimensions(newDimensions);
+    armoireDimensionsRef.current = newDimensions;
+  };
+
   return (
     <div ref={containerRef} className="absolute inset-0 flex flex-col">
-      <div className="flex-1 relative">
+      {/* Top Toolbar - always visible */}
+      <div
+        className={`absolute inset-x-0 top-0 z-20 transition-all duration-500 ease-out ${
+          isToolbarCollapsed ? '-translate-y-full opacity-0' : 'translate-y-0 opacity-100'
+        }`}
+      >
+        <div className="h-12 bg-gradient-to-b from-slate-900/95 via-slate-800/90 to-transparent backdrop-blur-sm border-b border-cyan-500/20">
+          <div className="h-full flex items-center justify-center gap-2 px-4">
+            {onPlay && (
+              <button
+                onClick={onPlay}
+                className="group relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 shadow-lg shadow-amber-500/30 hover:shadow-amber-500/50 hover:scale-105 transition-all duration-200 mr-3"
+                title="Construire"
+              >
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Hammer className="w-5 h-5 text-white" />
+              </button>
+            )}
+
+            <div className="w-px h-6 bg-slate-600/50 mr-2" />
+
+            <div className="flex items-center gap-1 mr-4">
+              <div className={`w-2 h-2 rounded-full ${isAnimationComplete ? 'bg-red-500' : isPlaying ? 'bg-emerald-500 animate-pulse' : 'bg-slate-500'}`} />
+              <span className={`text-[10px] font-mono uppercase tracking-wider ${isAnimationComplete ? 'text-red-400' : isPlaying ? 'text-emerald-400' : 'text-slate-500'}`}>
+                {isAnimationComplete ? 'Termine' : isPlaying ? 'Construction en cours' : 'En attente'}
+              </span>
+            </div>
+
+            <div className="relative">
+              <button
+                onClick={() => setActivePanel(activePanel === 'armoireColor' ? null : 'armoireColor')}
+                disabled={!isMaterialized}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                  activePanel === 'armoireColor'
+                    ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400'
+                    : isMaterialized
+                      ? 'bg-slate-800/50 border-slate-700/50 text-slate-300 hover:bg-slate-700/50 hover:text-cyan-400 hover:border-cyan-500/30'
+                      : 'bg-slate-800/30 border-slate-700/30 text-slate-500 cursor-not-allowed'
+                }`}
+                title="Couleur de l'armoire"
+              >
+                <Box className="w-3.5 h-3.5" />
+                <span>Couleur</span>
+                <div
+                  className="w-4 h-4 rounded border border-white/20"
+                  style={{ backgroundColor: `rgb(${currentColor.r}, ${currentColor.g}, ${currentColor.b})` }}
+                />
+              </button>
+
+              {activePanel === 'armoireColor' && isMaterialized && (
+                <div className="absolute top-full mt-2 left-0 bg-slate-900/95 backdrop-blur-sm rounded-xl border border-cyan-500/30 p-4 shadow-2xl z-50 min-w-[260px]">
+                  <div className="mb-4">
+                    <span className="text-sm font-semibold text-cyan-400">Couleur de l'armoire</span>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-2 uppercase tracking-wider">
+                        Couleur
+                      </label>
+
+                      <input
+                        ref={colorInputRef}
+                        type="color"
+                        value={rgbToHex(currentColor.r, currentColor.g, currentColor.b)}
+                        onChange={(e) => {
+                          const rgb = hexToRgb(e.target.value);
+                          setCurrentColor(rgb);
+                          currentColorRef.current = rgb;
+                        }}
+                        className="sr-only"
+                      />
+
+                      <button
+                        onClick={() => colorInputRef.current?.click()}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition-colors mb-3"
+                      >
+                        <Pipette className="w-4 h-4 text-cyan-400" />
+                        <span className="text-sm text-white">Pipette</span>
+                        <div
+                          className="ml-auto w-6 h-6 rounded border-2 border-white/20"
+                          style={{ backgroundColor: `rgb(${currentColor.r}, ${currentColor.g}, ${currentColor.b})` }}
+                        />
+                      </button>
+
+                      <div className="text-[10px] text-slate-500 mb-2">Couleur actuelle</div>
+                      <div className="flex items-center gap-2 mb-4 px-2 py-1.5 rounded-lg bg-slate-900/50">
+                        <div
+                          className="w-8 h-8 rounded-lg border-2 border-white/20"
+                          style={{ backgroundColor: `rgb(${currentColor.r}, ${currentColor.g}, ${currentColor.b})` }}
+                        />
+                        <span className="text-xs text-slate-300 font-mono">
+                          {rgbToHex(currentColor.r, currentColor.g, currentColor.b).toUpperCase()}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-[10px] text-slate-500">Couleurs enregistrees (3 max)</div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              const emptyIndex = savedColors.findIndex(c => c === null);
+                              if (emptyIndex !== -1) {
+                                const newSavedColors = [...savedColors];
+                                newSavedColors[emptyIndex] = {
+                                  ...currentColor,
+                                  hex: rgbToHex(currentColor.r, currentColor.g, currentColor.b)
+                                };
+                                setSavedColors(newSavedColors);
+                              }
+                            }}
+                            disabled={!savedColors.some(c => c === null)}
+                            className={`p-1.5 rounded-lg transition-colors ${savedColors.some(c => c === null) ? 'bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400' : 'bg-slate-700/30 text-slate-600 cursor-not-allowed'}`}
+                            title="Enregistrer la couleur actuelle"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setSavedColors([null, null, null])}
+                            disabled={!savedColors.some(c => c !== null)}
+                            className={`p-1.5 rounded-lg transition-colors ${savedColors.some(c => c !== null) ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400' : 'bg-slate-700/30 text-slate-600 cursor-not-allowed'}`}
+                            title="Supprimer toutes les couleurs"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {savedColors.map((savedColor, index) => (
+                          <div key={index} className="relative group/slot">
+                            {savedColor ? (
+                              <button
+                                onClick={() => {
+                                  setCurrentColor({ r: savedColor.r, g: savedColor.g, b: savedColor.b });
+                                  currentColorRef.current = { r: savedColor.r, g: savedColor.g, b: savedColor.b };
+                                }}
+                                className="w-10 h-10 rounded-lg border-2 border-white/20 shadow-lg transition-all duration-200 hover:scale-110 hover:border-cyan-400"
+                                style={{ backgroundColor: `rgb(${savedColor.r}, ${savedColor.g}, ${savedColor.b})` }}
+                                title={savedColor.hex}
+                              />
+                            ) : (
+                              <div
+                                className="w-10 h-10 rounded-lg border-2 border-dashed border-slate-600 flex items-center justify-center"
+                              >
+                                <span className="text-slate-600 text-xs">{index + 1}</span>
+                              </div>
+                            )}
+                            {savedColor && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const newSavedColors = [...savedColors];
+                                  newSavedColors[index] = null;
+                                  setSavedColors(newSavedColors);
+                                }}
+                                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setCurrentColor({ r: 200, g: 200, b: 200 });
+                        currentColorRef.current = { r: 200, g: 200, b: 200 };
+                      }}
+                      className="w-full mt-2 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600/50 hover:border-cyan-500/30 rounded-lg text-xs text-slate-300 hover:text-cyan-400 transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Reinitialiser</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="relative">
+              <button
+                onClick={() => setActivePanel(activePanel === 'dimension' ? null : 'dimension')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                  activePanel === 'dimension'
+                    ? 'bg-cyan-500/20 border border-cyan-500/50 text-cyan-400'
+                    : 'bg-slate-800/50 border border-slate-700/50 text-slate-300 hover:bg-slate-700/50 hover:text-cyan-400'
+                }`}
+                title="Modifier les dimensions"
+              >
+                <Ruler className="w-4 h-4" />
+                <span>Dimensions</span>
+              </button>
+
+              {activePanel === 'dimension' && (
+                <div className="absolute top-full mt-2 left-0 bg-slate-900/95 backdrop-blur-sm rounded-xl border border-cyan-500/30 p-4 shadow-2xl z-50 min-w-[220px]">
+                  <div className="mb-4">
+                    <span className="text-sm font-semibold text-cyan-400">Dimensions (cm)</span>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">
+                        Longueur
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={dimensionInputs.length}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/[^0-9]/g, '');
+                            setDimensionInputs(prev => ({ ...prev, length: val }));
+                          }}
+                          onBlur={() => {
+                            const val = parseInt(dimensionInputs.length);
+                            if (!isNaN(val) && val > 0) {
+                              handleDimensionChange('length', val);
+                              setDimensionInputs(prev => ({ ...prev, length: val.toString() }));
+                            } else {
+                              setDimensionInputs(prev => ({ ...prev, length: armoireDimensions.length.toString() }));
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }}
+                          className="flex-1 px-3 py-2 bg-slate-800/80 border border-slate-600/50 rounded-lg text-white text-sm font-mono focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-colors text-center"
+                          placeholder="60"
+                        />
+                        <span className="text-xs text-slate-500 font-mono w-6">cm</span>
+                      </div>
+                      <div className="text-[9px] text-slate-600 mt-1">0 = garder actuel</div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">
+                        Largeur
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={dimensionInputs.width}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/[^0-9]/g, '');
+                            setDimensionInputs(prev => ({ ...prev, width: val }));
+                          }}
+                          onBlur={() => {
+                            const val = parseInt(dimensionInputs.width);
+                            if (!isNaN(val) && val > 0) {
+                              handleDimensionChange('width', val);
+                              setDimensionInputs(prev => ({ ...prev, width: val.toString() }));
+                            } else {
+                              setDimensionInputs(prev => ({ ...prev, width: armoireDimensions.width.toString() }));
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }}
+                          className="flex-1 px-3 py-2 bg-slate-800/80 border border-slate-600/50 rounded-lg text-white text-sm font-mono focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-colors text-center"
+                          placeholder="140"
+                        />
+                        <span className="text-xs text-slate-500 font-mono w-6">cm</span>
+                      </div>
+                      <div className="text-[9px] text-slate-600 mt-1">0 = garder actuel</div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1.5 uppercase tracking-wider">
+                        Hauteur
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={dimensionInputs.height}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/[^0-9]/g, '');
+                            setDimensionInputs(prev => ({ ...prev, height: val }));
+                          }}
+                          onBlur={() => {
+                            const val = parseInt(dimensionInputs.height);
+                            if (!isNaN(val) && val > 0) {
+                              handleDimensionChange('height', val);
+                              setDimensionInputs(prev => ({ ...prev, height: val.toString() }));
+                            } else {
+                              setDimensionInputs(prev => ({ ...prev, height: armoireDimensions.height.toString() }));
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }}
+                          className="flex-1 px-3 py-2 bg-slate-800/80 border border-slate-600/50 rounded-lg text-white text-sm font-mono focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-colors text-center"
+                          placeholder="200"
+                        />
+                        <span className="text-xs text-slate-500 font-mono w-6">cm</span>
+                      </div>
+                      <div className="text-[9px] text-slate-600 mt-1">0 = garder actuel</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-slate-700/50">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500">Dimensions actuelles:</span>
+                      <span className="text-cyan-400 font-mono">
+                        {armoireDimensions.length} x {armoireDimensions.width} x {armoireDimensions.height} cm
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs mt-1">
+                      <span className="text-slate-500">En metres:</span>
+                      <span className="text-slate-300 font-mono">
+                        {(armoireDimensions.length / 100).toFixed(2)} x {(armoireDimensions.width / 100).toFixed(2)} x {(armoireDimensions.height / 100).toFixed(2)} m
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const defaultDimensions = { length: 140, width: 60, height: 200 };
+                        setArmoireDimensions(defaultDimensions);
+                        armoireDimensionsRef.current = defaultDimensions;
+                        setDimensionInputs({ length: '140', width: '60', height: '200' });
+                      }}
+                      className="w-full mt-3 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600/50 hover:border-cyan-500/30 rounded-lg text-xs text-slate-300 hover:text-cyan-400 transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Reinitialiser</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {isAnimationComplete && isMaterialized && (
+              <div className="relative">
+                <button
+                  onClick={() => setActivePanel(activePanel === 'exterior' ? null : 'exterior')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                    activePanel === 'exterior'
+                      ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400'
+                      : 'bg-slate-800/50 border-slate-700/50 text-slate-300 hover:bg-slate-700/50 hover:text-cyan-400 hover:border-cyan-500/30'
+                  }`}
+                  title="Traits exterieurs"
+                >
+                  <Square className="w-3.5 h-3.5" />
+                  <span>Exterieur</span>
+                </button>
+
+                {activePanel === 'exterior' && (
+                  <div className="absolute top-full mt-2 left-0 bg-slate-900/95 backdrop-blur-sm rounded-xl border border-cyan-500/30 p-4 shadow-2xl z-50 min-w-[260px]">
+                    <div className="mb-4">
+                      <span className="text-sm font-semibold text-cyan-400">Traits exterieurs</span>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-2 uppercase tracking-wider">
+                          Couleur
+                        </label>
+
+                        <input
+                          ref={exteriorColorInputRef}
+                          type="color"
+                          value={exteriorLineColor}
+                          onChange={(e) => {
+                            setExteriorLineColor(e.target.value);
+                            exteriorLineColorRef.current = e.target.value;
+                          }}
+                          className="sr-only"
+                        />
+
+                        <button
+                          onClick={() => exteriorColorInputRef.current?.click()}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition-colors mb-3"
+                        >
+                          <Pipette className="w-4 h-4 text-cyan-400" />
+                          <span className="text-sm text-white">Pipette</span>
+                          <div
+                            className="ml-auto w-6 h-6 rounded border-2 border-white/20"
+                            style={{ backgroundColor: exteriorLineColor }}
+                          />
+                        </button>
+
+                        <div className="text-[10px] text-slate-500 mb-2">Couleur actuelle</div>
+                        <div className="flex items-center gap-2 mb-4 px-2 py-1.5 rounded-lg bg-slate-900/50">
+                          <div
+                            className="w-8 h-8 rounded-lg border-2 border-white/20"
+                            style={{ backgroundColor: exteriorLineColor }}
+                          />
+                          <span className="text-xs text-slate-300 font-mono">
+                            {exteriorLineColor.toUpperCase()}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-[10px] text-slate-500">Couleurs enregistrees (3 max)</div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                const emptyIndex = exteriorSavedColors.findIndex(c => c === null);
+                                if (emptyIndex !== -1) {
+                                  const rgb = hexToRgb(exteriorLineColor);
+                                  const newSavedColors = [...exteriorSavedColors];
+                                  newSavedColors[emptyIndex] = {
+                                    ...rgb,
+                                    hex: exteriorLineColor
+                                  };
+                                  setExteriorSavedColors(newSavedColors);
+                                }
+                              }}
+                              disabled={!exteriorSavedColors.some(c => c === null)}
+                              className={`p-1.5 rounded-lg transition-colors ${exteriorSavedColors.some(c => c === null) ? 'bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400' : 'bg-slate-700/30 text-slate-600 cursor-not-allowed'}`}
+                              title="Enregistrer la couleur actuelle"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setExteriorSavedColors([null, null, null])}
+                              disabled={!exteriorSavedColors.some(c => c !== null)}
+                              className={`p-1.5 rounded-lg transition-colors ${exteriorSavedColors.some(c => c !== null) ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400' : 'bg-slate-700/30 text-slate-600 cursor-not-allowed'}`}
+                              title="Supprimer toutes les couleurs"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {exteriorSavedColors.map((savedColor, index) => (
+                            <div key={index} className="relative group/slot">
+                              {savedColor ? (
+                                <button
+                                  onClick={() => {
+                                    setExteriorLineColor(savedColor.hex);
+                                    exteriorLineColorRef.current = savedColor.hex;
+                                  }}
+                                  className="w-10 h-10 rounded-lg border-2 border-white/20 shadow-lg transition-all duration-200 hover:scale-110 hover:border-cyan-400"
+                                  style={{ backgroundColor: `rgb(${savedColor.r}, ${savedColor.g}, ${savedColor.b})` }}
+                                  title={savedColor.hex}
+                                />
+                              ) : (
+                                <div
+                                  className="w-10 h-10 rounded-lg border-2 border-dashed border-slate-600 flex items-center justify-center"
+                                >
+                                  <span className="text-slate-600 text-xs">{index + 1}</span>
+                                </div>
+                              )}
+                              {savedColor && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const newSavedColors = [...exteriorSavedColors];
+                                    newSavedColors[index] = null;
+                                    setExteriorSavedColors(newSavedColors);
+                                  }}
+                                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-2 uppercase tracking-wider">
+                          Epaisseur: {exteriorLineWidth}px
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="range"
+                            min="0.5"
+                            max="5"
+                            step="0.5"
+                            value={exteriorLineWidth}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              setExteriorLineWidth(val);
+                              exteriorLineWidthRef.current = val;
+                            }}
+                            className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                          />
+                          <input
+                            type="text"
+                            value={exteriorLineWidth}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              if (!isNaN(val) && val >= 0.5 && val <= 10) {
+                                setExteriorLineWidth(val);
+                                exteriorLineWidthRef.current = val;
+                              }
+                            }}
+                            className="w-14 px-2 py-1 bg-slate-800/80 border border-slate-600/50 rounded-lg text-white text-sm font-mono text-center focus:border-cyan-500/50 focus:outline-none"
+                          />
+                        </div>
+                        <div className="flex justify-between text-[10px] text-slate-500 mt-1 px-1">
+                          <span>Fin</span>
+                          <span>Epais</span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setExteriorLineColor('#64748B');
+                          exteriorLineColorRef.current = '#64748B';
+                          setExteriorLineWidth(1);
+                          exteriorLineWidthRef.current = 1;
+                        }}
+                        className="w-full mt-2 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600/50 hover:border-cyan-500/30 rounded-lg text-xs text-slate-300 hover:text-cyan-400 transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Reinitialiser</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isAnimationComplete && isMaterialized && (
+              <div className="relative">
+                <button
+                  onClick={() => setActivePanel(activePanel === 'interior' ? null : 'interior')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                    activePanel === 'interior'
+                      ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
+                      : 'bg-slate-800/50 border-slate-700/50 text-slate-300 hover:bg-slate-700/50 hover:text-amber-400 hover:border-amber-500/30'
+                  }`}
+                  title="Traits interieurs"
+                >
+                  <Grid3x3 className="w-3.5 h-3.5" />
+                  <span>Interieur</span>
+                </button>
+
+                {activePanel === 'interior' && (
+                  <div className="absolute top-full mt-2 left-0 bg-slate-900/95 backdrop-blur-sm rounded-xl border border-amber-500/30 p-4 shadow-2xl z-50 min-w-[260px]">
+                    <div className="mb-4">
+                      <span className="text-sm font-semibold text-amber-400">Traits interieurs</span>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-2 uppercase tracking-wider">
+                          Couleur
+                        </label>
+
+                        <input
+                          ref={interiorColorInputRef}
+                          type="color"
+                          value={interiorLineColor}
+                          onChange={(e) => {
+                            setInteriorLineColor(e.target.value);
+                            interiorLineColorRef.current = e.target.value;
+                          }}
+                          className="sr-only"
+                        />
+
+                        <button
+                          onClick={() => interiorColorInputRef.current?.click()}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition-colors mb-3"
+                        >
+                          <Pipette className="w-4 h-4 text-amber-400" />
+                          <span className="text-sm text-white">Pipette</span>
+                          <div
+                            className="ml-auto w-6 h-6 rounded border-2 border-white/20"
+                            style={{ backgroundColor: interiorLineColor }}
+                          />
+                        </button>
+
+                        <div className="text-[10px] text-slate-500 mb-2">Couleur actuelle</div>
+                        <div className="flex items-center gap-2 mb-4 px-2 py-1.5 rounded-lg bg-slate-900/50">
+                          <div
+                            className="w-8 h-8 rounded-lg border-2 border-white/20"
+                            style={{ backgroundColor: interiorLineColor }}
+                          />
+                          <span className="text-xs text-slate-300 font-mono">
+                            {interiorLineColor.toUpperCase()}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-[10px] text-slate-500">Couleurs enregistrees (3 max)</div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                const emptyIndex = interiorSavedColors.findIndex(c => c === null);
+                                if (emptyIndex !== -1) {
+                                  const rgb = hexToRgb(interiorLineColor);
+                                  const newSavedColors = [...interiorSavedColors];
+                                  newSavedColors[emptyIndex] = {
+                                    ...rgb,
+                                    hex: interiorLineColor
+                                  };
+                                  setInteriorSavedColors(newSavedColors);
+                                }
+                              }}
+                              disabled={!interiorSavedColors.some(c => c === null)}
+                              className={`p-1.5 rounded-lg transition-colors ${interiorSavedColors.some(c => c === null) ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400' : 'bg-slate-700/30 text-slate-600 cursor-not-allowed'}`}
+                              title="Enregistrer la couleur actuelle"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setInteriorSavedColors([null, null, null])}
+                              disabled={!interiorSavedColors.some(c => c !== null)}
+                              className={`p-1.5 rounded-lg transition-colors ${interiorSavedColors.some(c => c !== null) ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400' : 'bg-slate-700/30 text-slate-600 cursor-not-allowed'}`}
+                              title="Supprimer toutes les couleurs"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {interiorSavedColors.map((savedColor, index) => (
+                            <div key={index} className="relative group/slot">
+                              {savedColor ? (
+                                <button
+                                  onClick={() => {
+                                    setInteriorLineColor(savedColor.hex);
+                                    interiorLineColorRef.current = savedColor.hex;
+                                  }}
+                                  className="w-10 h-10 rounded-lg border-2 border-white/20 shadow-lg transition-all duration-200 hover:scale-110 hover:border-amber-400"
+                                  style={{ backgroundColor: `rgb(${savedColor.r}, ${savedColor.g}, ${savedColor.b})` }}
+                                  title={savedColor.hex}
+                                />
+                              ) : (
+                                <div
+                                  className="w-10 h-10 rounded-lg border-2 border-dashed border-slate-600 flex items-center justify-center"
+                                >
+                                  <span className="text-slate-600 text-xs">{index + 1}</span>
+                                </div>
+                              )}
+                              {savedColor && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const newSavedColors = [...interiorSavedColors];
+                                    newSavedColors[index] = null;
+                                    setInteriorSavedColors(newSavedColors);
+                                  }}
+                                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-2 uppercase tracking-wider">
+                          Epaisseur: {interiorLineWidth}px
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="range"
+                            min="0.5"
+                            max="5"
+                            step="0.5"
+                            value={interiorLineWidth}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              setInteriorLineWidth(val);
+                              interiorLineWidthRef.current = val;
+                            }}
+                            className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                          />
+                          <input
+                            type="text"
+                            value={interiorLineWidth}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              if (!isNaN(val) && val >= 0.5 && val <= 10) {
+                                setInteriorLineWidth(val);
+                                interiorLineWidthRef.current = val;
+                              }
+                            }}
+                            className="w-14 px-2 py-1 bg-slate-800/80 border border-slate-600/50 rounded-lg text-white text-sm font-mono text-center focus:border-amber-500/50 focus:outline-none"
+                          />
+                        </div>
+                        <div className="flex justify-between text-[10px] text-slate-500 mt-1 px-1">
+                          <span>Fin</span>
+                          <span>Epais</span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setInteriorLineColor('#6B7280');
+                          interiorLineColorRef.current = '#6B7280';
+                          setInteriorLineWidth(1);
+                          interiorLineWidthRef.current = 1;
+                        }}
+                        className="w-full mt-2 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600/50 hover:border-amber-500/30 rounded-lg text-xs text-slate-300 hover:text-amber-400 transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Reinitialiser</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="relative">
+              <button
+                onClick={() => setActivePanel(activePanel === 'background' ? null : 'background')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                  activePanel === 'background'
+                    ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
+                    : 'bg-slate-800/50 border-slate-700/50 text-slate-300 hover:bg-slate-700/50 hover:text-emerald-400 hover:border-emerald-500/30'
+                }`}
+                title="Arriere-plan"
+              >
+                <Palette className="w-3.5 h-3.5" />
+                <span>Fond</span>
+              </button>
+
+              {activePanel === 'background' && (
+                <div className="absolute top-full mt-2 left-0 bg-slate-900/95 backdrop-blur-sm rounded-xl border border-emerald-500/30 p-4 shadow-2xl z-50 min-w-[260px]">
+                  <div className="mb-4">
+                    <span className="text-sm font-semibold text-emerald-400">Arriere-plan</span>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-2 uppercase tracking-wider">
+                        Couleur
+                      </label>
+
+                      <input
+                        ref={backgroundColorInputRef}
+                        type="color"
+                        value={backgroundColor}
+                        onChange={(e) => {
+                          setBackgroundColor(e.target.value);
+                          backgroundColorRef.current = e.target.value;
+                        }}
+                        className="sr-only"
+                      />
+
+                      <button
+                        onClick={() => backgroundColorInputRef.current?.click()}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition-colors mb-3"
+                      >
+                        <Pipette className="w-4 h-4 text-emerald-400" />
+                        <span className="text-sm text-white">Pipette</span>
+                        <div
+                          className="ml-auto w-6 h-6 rounded border-2 border-white/20"
+                          style={{ backgroundColor: backgroundColor }}
+                        />
+                      </button>
+
+                      <div className="text-[10px] text-slate-500 mb-2">Couleur actuelle</div>
+                      <div className="flex items-center gap-2 mb-4 px-2 py-1.5 rounded-lg bg-slate-900/50">
+                        <div
+                          className="w-8 h-8 rounded-lg border-2 border-white/20"
+                          style={{ backgroundColor: backgroundColor }}
+                        />
+                        <span className="text-xs text-slate-300 font-mono">
+                          {backgroundColor.toUpperCase()}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-[10px] text-slate-500">Couleurs enregistrees (3 max)</div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              const emptyIndex = backgroundSavedColors.findIndex(c => c === null);
+                              if (emptyIndex !== -1) {
+                                const rgb = hexToRgb(backgroundColor);
+                                const newSavedColors = [...backgroundSavedColors];
+                                newSavedColors[emptyIndex] = {
+                                  ...rgb,
+                                  hex: backgroundColor
+                                };
+                                setBackgroundSavedColors(newSavedColors);
+                              }
+                            }}
+                            disabled={!backgroundSavedColors.some(c => c === null)}
+                            className={`p-1.5 rounded-lg transition-colors ${backgroundSavedColors.some(c => c === null) ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400' : 'bg-slate-700/30 text-slate-600 cursor-not-allowed'}`}
+                            title="Enregistrer la couleur actuelle"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setBackgroundSavedColors([null, null, null])}
+                            disabled={!backgroundSavedColors.some(c => c !== null)}
+                            className={`p-1.5 rounded-lg transition-colors ${backgroundSavedColors.some(c => c !== null) ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400' : 'bg-slate-700/30 text-slate-600 cursor-not-allowed'}`}
+                            title="Supprimer toutes les couleurs"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {backgroundSavedColors.map((savedColor, index) => (
+                          <div key={index} className="relative group/slot">
+                            {savedColor ? (
+                              <button
+                                onClick={() => {
+                                  setBackgroundColor(savedColor.hex);
+                                  backgroundColorRef.current = savedColor.hex;
+                                }}
+                                className="w-10 h-10 rounded-lg border-2 border-white/20 shadow-lg transition-all duration-200 hover:scale-110 hover:border-emerald-400"
+                                style={{ backgroundColor: `rgb(${savedColor.r}, ${savedColor.g}, ${savedColor.b})` }}
+                                title={savedColor.hex}
+                              />
+                            ) : (
+                              <div
+                                className="w-10 h-10 rounded-lg border-2 border-dashed border-slate-600 flex items-center justify-center"
+                              >
+                                <span className="text-slate-600 text-xs">{index + 1}</span>
+                              </div>
+                            )}
+                            {savedColor && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const newSavedColors = [...backgroundSavedColors];
+                                  newSavedColors[index] = null;
+                                  setBackgroundSavedColors(newSavedColors);
+                                }}
+                                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setBackgroundColor('#050a15');
+                        backgroundColorRef.current = '#050a15';
+                      }}
+                      className="w-full mt-2 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600/50 hover:border-emerald-500/30 rounded-lg text-xs text-slate-300 hover:text-emerald-400 transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Reinitialiser</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-[10px] text-slate-500 font-mono">
+                {isMaterialized ? 'Mode Solid' : 'Mode Wireframe'}
+              </span>
+              <div
+                className="w-3 h-3 rounded border border-white/30"
+                style={{ backgroundColor: `rgb(${currentColor.r}, ${currentColor.g}, ${currentColor.b})` }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Toggle button for toolbar */}
+      <button
+        onClick={() => setIsToolbarCollapsed(!isToolbarCollapsed)}
+        className={`absolute z-30 left-1/2 -translate-x-1/2 transition-all duration-500 ${
+          isToolbarCollapsed ? 'top-0' : 'top-12'
+        }`}
+      >
+        <div className="flex items-center gap-1 px-3 py-1 bg-slate-800/90 backdrop-blur-sm rounded-b-lg border border-t-0 border-cyan-500/30 hover:border-cyan-400/50 transition-colors group">
+          {isToolbarCollapsed ? (
+            <ChevronDown className="w-4 h-4 text-cyan-400 group-hover:text-cyan-300" />
+          ) : (
+            <ChevronUp className="w-4 h-4 text-cyan-400 group-hover:text-cyan-300" />
+          )}
+          <span className="text-[10px] text-cyan-400/70 group-hover:text-cyan-300 font-mono">
+            {isToolbarCollapsed ? 'Outils' : 'Reduire'}
+          </span>
+        </div>
+      </button>
+
+      <div className="flex-1 relative flex items-center justify-center overflow-hidden" style={{ background: backgroundColor }}>
         <canvas
           ref={canvasRef}
-          width={dimensions.width}
-          height={dimensions.height - 56}
-          className={`absolute inset-0 ${isFreeRotation ? 'cursor-grab active:cursor-grabbing' : ''}`}
-          style={{ background: '#050a15' }}
+          className={`${isFreeRotation ? 'cursor-grab active:cursor-grabbing' : ''}`}
+          style={{ background: backgroundColor }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -1092,221 +2078,124 @@ const Animation3DViewer: React.FC<Animation3DViewerProps> = ({
         )}
       </div>
 
-      <div className="h-14 bg-gradient-to-r from-slate-900/95 via-slate-800/95 to-slate-900/95 border-t border-cyan-500/30 flex items-center justify-center gap-2 px-4">
-        <span className="text-cyan-400/70 text-xs font-mono mr-2">VITESSE</span>
-        {SPEED_OPTIONS.map((option) => (
+      {/* Toggle button for bottom bar */}
+      <button
+        onClick={() => setIsBottomBarCollapsed(!isBottomBarCollapsed)}
+        className={`absolute z-30 left-1/2 -translate-x-1/2 transition-all duration-500 ${
+          isBottomBarCollapsed ? 'bottom-0' : 'bottom-14'
+        }`}
+      >
+        <div className="flex items-center gap-1 px-3 py-1 bg-slate-800/90 backdrop-blur-sm rounded-t-lg border border-b-0 border-cyan-500/30 hover:border-cyan-400/50 transition-colors group">
+          {isBottomBarCollapsed ? (
+            <ChevronUp className="w-4 h-4 text-cyan-400 group-hover:text-cyan-300" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-cyan-400 group-hover:text-cyan-300" />
+          )}
+          <span className="text-[10px] text-cyan-400/70 group-hover:text-cyan-300 font-mono">
+            {isBottomBarCollapsed ? 'Controles' : 'Reduire'}
+          </span>
+        </div>
+      </button>
+
+      {/* Bottom Bar - positioned absolutely */}
+      <div
+        className={`absolute inset-x-0 bottom-0 z-20 transition-all duration-500 ease-out ${
+          isBottomBarCollapsed ? 'translate-y-full opacity-0' : 'translate-y-0 opacity-100'
+        }`}
+      >
+        <div className="h-14 bg-gradient-to-r from-slate-900/95 via-slate-800/95 to-slate-900/95 border-t border-cyan-500/30 flex items-center justify-center gap-2 px-4">
+          <span className="text-cyan-400/70 text-xs font-mono mr-2">VITESSE</span>
+          {SPEED_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => handleSpeedChange(option.value)}
+              className={`
+                px-4 py-2 rounded font-mono text-sm font-semibold transition-all duration-200
+                ${selectedSpeed === option.value
+                  ? 'bg-cyan-500 text-slate-900 shadow-lg shadow-cyan-500/40'
+                  : 'bg-slate-700/50 text-cyan-400 hover:bg-slate-600/50 border border-cyan-500/30 hover:border-cyan-400/50'
+                }
+              `}
+            >
+              {option.label}
+            </button>
+          ))}
+
+          <div className="w-px h-8 bg-cyan-500/30 mx-3" />
+
           <button
-            key={option.value}
-            onClick={() => handleSpeedChange(option.value)}
+            onClick={restartAnimation}
+            className="p-2 rounded-lg font-mono text-sm font-semibold transition-all duration-200 mr-2 bg-slate-700/50 text-cyan-400 hover:bg-slate-600/50 border border-cyan-500/30 hover:border-cyan-400/50"
+            title="Relancer l'animation"
+          >
+            <RefreshCw className="w-5 h-5" />
+          </button>
+
+          <button
+            onClick={skipToEnd}
+            className="p-2 rounded-lg font-mono text-sm font-semibold transition-all duration-200 mr-2 bg-slate-700/50 text-cyan-400 hover:bg-slate-600/50 border border-cyan-500/30 hover:border-cyan-400/50"
+            title="Aller a la fin"
+          >
+            <SkipForward className="w-5 h-5" />
+          </button>
+
+          <button
+            onClick={toggleAutoRotation}
             className={`
-              px-4 py-2 rounded font-mono text-sm font-semibold transition-all duration-200
-              ${selectedSpeed === option.value
-                ? 'bg-cyan-500 text-slate-900 shadow-lg shadow-cyan-500/40'
+              p-2 rounded-lg font-mono text-sm font-semibold transition-all duration-200 mr-2
+              ${isAutoRotating
+                ? 'bg-cyan-500 text-slate-900 shadow-lg shadow-cyan-500/40 hover:bg-cyan-400'
                 : 'bg-slate-700/50 text-cyan-400 hover:bg-slate-600/50 border border-cyan-500/30 hover:border-cyan-400/50'
               }
             `}
+            title={isAutoRotating ? 'Arreter le pivotement' : 'Activer le pivotement'}
           >
-            {option.label}
+            <RotateCcw className={`w-5 h-5 ${isAutoRotating ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
           </button>
-        ))}
-
-        <div className="w-px h-8 bg-cyan-500/30 mx-3" />
-
-        <button
-          onClick={restartAnimation}
-          className="p-2 rounded-lg font-mono text-sm font-semibold transition-all duration-200 mr-2 bg-slate-700/50 text-cyan-400 hover:bg-slate-600/50 border border-cyan-500/30 hover:border-cyan-400/50"
-          title="Relancer l'animation"
-        >
-          <RefreshCw className="w-5 h-5" />
-        </button>
-
-        <button
-          onClick={skipToEnd}
-          className="p-2 rounded-lg font-mono text-sm font-semibold transition-all duration-200 mr-2 bg-slate-700/50 text-cyan-400 hover:bg-slate-600/50 border border-cyan-500/30 hover:border-cyan-400/50"
-          title="Aller a la fin"
-        >
-          <SkipForward className="w-5 h-5" />
-        </button>
-
-        <button
-          onClick={toggleAutoRotation}
-          className={`
-            p-2 rounded-lg font-mono text-sm font-semibold transition-all duration-200 mr-2
-            ${isAutoRotating
-              ? 'bg-cyan-500 text-slate-900 shadow-lg shadow-cyan-500/40 hover:bg-cyan-400'
-              : 'bg-slate-700/50 text-cyan-400 hover:bg-slate-600/50 border border-cyan-500/30 hover:border-cyan-400/50'
-            }
-          `}
-          title={isAutoRotating ? 'Arreter le pivotement' : 'Activer le pivotement'}
-        >
-          <RotateCcw className={`w-5 h-5 ${isAutoRotating ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
-        </button>
-
-        <button
-          onClick={toggleFreeRotation}
-          className={`
-            p-2 rounded-lg font-mono text-sm font-semibold transition-all duration-200 mr-2
-            ${isFreeRotation
-              ? 'bg-cyan-500 text-slate-900 shadow-lg shadow-cyan-500/40 hover:bg-cyan-400'
-              : 'bg-slate-700/50 text-cyan-400 hover:bg-slate-600/50 border border-cyan-500/30 hover:border-cyan-400/50'
-            }
-          `}
-          title={isFreeRotation ? 'Desactiver rotation libre' : 'Activer rotation libre'}
-        >
-          <Rotate3d className={`w-5 h-5 ${isFreeRotation ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
-        </button>
-
-        <button
-          onClick={togglePause}
-          className={`
-            p-2 rounded-lg font-mono text-sm font-semibold transition-all duration-200
-            ${isPaused
-              ? 'bg-green-500 text-slate-900 shadow-lg shadow-green-500/40 hover:bg-green-400'
-              : 'bg-orange-500 text-slate-900 shadow-lg shadow-orange-500/40 hover:bg-orange-400'
-            }
-          `}
-          title={isPaused ? 'Reprendre' : 'Pause'}
-        >
-          {isPaused ? <Play className="w-5 h-5" /> : <Pause className="w-5 h-5" />}
-        </button>
-
-        <div className="ml-auto pl-6 border-l border-cyan-500/20 flex items-center gap-3">
-          <div className="relative">
-            <input
-              ref={colorInputRef}
-              type="color"
-              value={rgbToHex(currentColor.r, currentColor.g, currentColor.b)}
-              onChange={(e) => {
-                const rgb = hexToRgb(e.target.value);
-                setCurrentColor(rgb);
-                currentColorRef.current = rgb;
-              }}
-              className="sr-only"
-            />
-
-            <button
-              onClick={() => setShowColorPicker(!showColorPicker)}
-              disabled={!isMaterialized}
-              className={`group relative flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-300 ${!isMaterialized ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-700/50'} bg-slate-800/80 border border-slate-600/50`}
-              title="Selecteur de couleur"
-            >
-              <div
-                className="w-6 h-6 rounded-lg border-2 border-white/30 shadow-inner"
-                style={{ backgroundColor: `rgb(${currentColor.r}, ${currentColor.g}, ${currentColor.b})` }}
-              />
-            </button>
-
-            {showColorPicker && isMaterialized && (
-              <div className="absolute bottom-full mb-2 right-0 bg-slate-800/95 backdrop-blur-sm rounded-xl border border-slate-600/50 p-4 shadow-2xl z-50 min-w-[200px]">
-                <div className="text-xs text-slate-400 mb-3 font-medium">Selecteur de couleur</div>
-
-                <button
-                  onClick={() => colorInputRef.current?.click()}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition-colors mb-3"
-                >
-                  <Pipette className="w-4 h-4 text-cyan-400" />
-                  <span className="text-sm text-white">Pipette</span>
-                  <div
-                    className="ml-auto w-6 h-6 rounded border-2 border-white/20"
-                    style={{ backgroundColor: `rgb(${currentColor.r}, ${currentColor.g}, ${currentColor.b})` }}
-                  />
-                </button>
-
-                <div className="text-[10px] text-slate-500 mb-2">Couleur actuelle</div>
-                <div className="flex items-center gap-2 mb-4 px-2 py-1.5 rounded-lg bg-slate-900/50">
-                  <div
-                    className="w-8 h-8 rounded-lg border-2 border-white/20"
-                    style={{ backgroundColor: `rgb(${currentColor.r}, ${currentColor.g}, ${currentColor.b})` }}
-                  />
-                  <span className="text-xs text-slate-300 font-mono">
-                    {rgbToHex(currentColor.r, currentColor.g, currentColor.b).toUpperCase()}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-[10px] text-slate-500">Couleurs enregistrees (3 max)</div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => {
-                        const emptyIndex = savedColors.findIndex(c => c === null);
-                        if (emptyIndex !== -1) {
-                          const newSavedColors = [...savedColors];
-                          newSavedColors[emptyIndex] = {
-                            ...currentColor,
-                            hex: rgbToHex(currentColor.r, currentColor.g, currentColor.b)
-                          };
-                          setSavedColors(newSavedColors);
-                        }
-                      }}
-                      disabled={!savedColors.some(c => c === null)}
-                      className={`p-1.5 rounded-lg transition-colors ${savedColors.some(c => c === null) ? 'bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400' : 'bg-slate-700/30 text-slate-600 cursor-not-allowed'}`}
-                      title="Enregistrer la couleur actuelle"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setSavedColors([null, null, null])}
-                      disabled={!savedColors.some(c => c !== null)}
-                      className={`p-1.5 rounded-lg transition-colors ${savedColors.some(c => c !== null) ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400' : 'bg-slate-700/30 text-slate-600 cursor-not-allowed'}`}
-                      title="Supprimer toutes les couleurs"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {savedColors.map((savedColor, index) => (
-                    <div key={index} className="relative group/slot">
-                      {savedColor ? (
-                        <button
-                          onClick={() => {
-                            setCurrentColor({ r: savedColor.r, g: savedColor.g, b: savedColor.b });
-                            currentColorRef.current = { r: savedColor.r, g: savedColor.g, b: savedColor.b };
-                          }}
-                          className="w-10 h-10 rounded-lg border-2 border-white/20 shadow-lg transition-all duration-200 hover:scale-110 hover:border-cyan-400"
-                          style={{ backgroundColor: `rgb(${savedColor.r}, ${savedColor.g}, ${savedColor.b})` }}
-                          title={savedColor.hex}
-                        />
-                      ) : (
-                        <div
-                          className="w-10 h-10 rounded-lg border-2 border-dashed border-slate-600 flex items-center justify-center"
-                        >
-                          <span className="text-slate-600 text-xs">{index + 1}</span>
-                        </div>
-                      )}
-                      {savedColor && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const newSavedColors = [...savedColors];
-                            newSavedColors[index] = null;
-                            setSavedColors(newSavedColors);
-                          }}
-                          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
 
           <button
-            onClick={toggleMaterialization}
-            disabled={!isAnimationComplete}
-            className={`group relative px-5 py-2.5 rounded-xl font-medium text-sm transition-all duration-300 overflow-hidden ${isMaterialized ? 'ring-2 ring-white/50' : ''} ${!isAnimationComplete ? 'opacity-40 cursor-not-allowed' : ''}`}
+            onClick={toggleFreeRotation}
+            className={`
+              p-2 rounded-lg font-mono text-sm font-semibold transition-all duration-200 mr-2
+              ${isFreeRotation
+                ? 'bg-cyan-500 text-slate-900 shadow-lg shadow-cyan-500/40 hover:bg-cyan-400'
+                : 'bg-slate-700/50 text-cyan-400 hover:bg-slate-600/50 border border-cyan-500/30 hover:border-cyan-400/50'
+              }
+            `}
+            title={isFreeRotation ? 'Desactiver rotation libre' : 'Activer rotation libre'}
           >
-            <div className={`absolute inset-0 bg-gradient-to-r ${!isAnimationComplete ? 'from-gray-500 via-gray-600 to-gray-500' : isMaterialized ? 'from-white via-gray-200 to-white' : 'from-cyan-500 via-blue-500 to-cyan-500'} opacity-90 ${isAnimationComplete ? 'group-hover:opacity-100' : ''} transition-opacity`} />
-            <div className={`absolute inset-0 bg-gradient-to-r ${!isAnimationComplete ? 'from-gray-500 via-gray-600 to-gray-500' : isMaterialized ? 'from-white via-gray-200 to-white' : 'from-cyan-400 via-blue-400 to-cyan-400'} opacity-0 ${isAnimationComplete ? 'group-hover:opacity-100' : ''} blur-xl transition-opacity`} />
-            <div className={`absolute inset-[1px] ${isMaterialized ? 'bg-slate-800/90' : 'bg-slate-900/80'} rounded-[10px] ${isAnimationComplete ? 'group-hover:bg-slate-900/60' : ''} transition-colors`} />
-            <div className={`relative flex items-center gap-2.5 ${!isAnimationComplete ? 'text-gray-400' : isMaterialized ? 'text-white' : 'text-cyan-100'} ${isAnimationComplete ? 'group-hover:text-white' : ''} transition-colors`}>
-              <Box className={`w-4 h-4 transition-transform duration-300 ${isMaterialized ? 'rotate-12' : isAnimationComplete ? 'group-hover:rotate-12' : ''}`} />
-              <span className="tracking-wide">{isMaterialized ? 'Retour Wireframe' : 'Materialiser l\'objet'}</span>
-            </div>
+            <Rotate3d className={`w-5 h-5 ${isFreeRotation ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
           </button>
+
+          <button
+            onClick={togglePause}
+            className={`
+              p-2 rounded-lg font-mono text-sm font-semibold transition-all duration-200
+              ${isPaused
+                ? 'bg-green-500 text-slate-900 shadow-lg shadow-green-500/40 hover:bg-green-400'
+                : 'bg-orange-500 text-slate-900 shadow-lg shadow-orange-500/40 hover:bg-orange-400'
+              }
+            `}
+            title={isPaused ? 'Reprendre' : 'Pause'}
+          >
+            {isPaused ? <Play className="w-5 h-5" /> : <Pause className="w-5 h-5" />}
+          </button>
+
+          <div className="ml-auto pl-6 border-l border-cyan-500/20 flex items-center gap-3">
+            <button
+              onClick={toggleMaterialization}
+              disabled={!isAnimationComplete}
+              className={`group relative px-5 py-2.5 rounded-xl font-medium text-sm transition-all duration-300 overflow-hidden ${isMaterialized ? 'ring-2 ring-white/50' : ''} ${!isAnimationComplete ? 'opacity-40 cursor-not-allowed' : ''}`}
+            >
+              <div className={`absolute inset-0 bg-gradient-to-r ${!isAnimationComplete ? 'from-gray-500 via-gray-600 to-gray-500' : isMaterialized ? 'from-white via-gray-200 to-white' : 'from-cyan-500 via-blue-500 to-cyan-500'} opacity-90 ${isAnimationComplete ? 'group-hover:opacity-100' : ''} transition-opacity`} />
+              <div className={`absolute inset-0 bg-gradient-to-r ${!isAnimationComplete ? 'from-gray-500 via-gray-600 to-gray-500' : isMaterialized ? 'from-white via-gray-200 to-white' : 'from-cyan-400 via-blue-400 to-cyan-400'} opacity-0 ${isAnimationComplete ? 'group-hover:opacity-100' : ''} blur-xl transition-opacity`} />
+              <div className={`absolute inset-[1px] ${isMaterialized ? 'bg-slate-800/90' : 'bg-slate-900/80'} rounded-[10px] ${isAnimationComplete ? 'group-hover:bg-slate-900/60' : ''} transition-colors`} />
+              <div className={`relative flex items-center gap-2.5 ${!isAnimationComplete ? 'text-gray-400' : isMaterialized ? 'text-white' : 'text-cyan-100'} ${isAnimationComplete ? 'group-hover:text-white' : ''} transition-colors`}>
+                <Box className={`w-4 h-4 transition-transform duration-300 ${isMaterialized ? 'rotate-12' : isAnimationComplete ? 'group-hover:rotate-12' : ''}`} />
+                <span className="tracking-wide">{isMaterialized ? 'Retour Wireframe' : 'Materialiser l\'objet'}</span>
+              </div>
+            </button>
+          </div>
         </div>
       </div>
     </div>

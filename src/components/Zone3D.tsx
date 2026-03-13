@@ -760,16 +760,24 @@ const Zone3D: React.FC<Zone3DProps> = ({
     };
     animate();
 
+    let resizeTimeout: number | null = null;
     const handleResize = () => {
-      if (!containerRef.current || !cameraRef.current || !rendererRef.current) return;
-      const width = containerRef.current.clientWidth;
-      const height = containerRef.current.clientHeight;
-      cameraRef.current.aspect = width / height;
-      cameraRef.current.updateProjectionMatrix();
-      rendererRef.current.setSize(width, height);
-      if (postProcessingRef.current) {
-        postProcessingRef.current.setSize(width, height);
+      if (resizeTimeout) {
+        cancelAnimationFrame(resizeTimeout);
       }
+      resizeTimeout = requestAnimationFrame(() => {
+        if (!containerRef.current || !cameraRef.current || !rendererRef.current) return;
+        const width = containerRef.current.clientWidth;
+        const height = containerRef.current.clientHeight;
+        if (width <= 0 || height <= 0) return;
+        cameraRef.current.aspect = width / height;
+        cameraRef.current.updateProjectionMatrix();
+        rendererRef.current.setSize(width, height, false);
+        if (postProcessingRef.current) {
+          postProcessingRef.current.setSize(width, height);
+        }
+        resizeTimeout = null;
+      });
     };
 
     window.addEventListener('resize', handleResize);
@@ -853,6 +861,9 @@ const Zone3D: React.FC<Zone3DProps> = ({
           child.material?.dispose();
         }
       }
+      if (child instanceof THREE.Light && (child as THREE.DirectionalLight).shadow?.map) {
+        (child as THREE.DirectionalLight).shadow.map?.dispose();
+      }
     });
 
     const gridWidthMeters = gridSettings.gridWidthMeters;
@@ -860,6 +871,16 @@ const Zone3D: React.FC<Zone3DProps> = ({
     const cellSizeMeters = gridSettings.cellSize || 0.1;
     const centerX = gridWidthMeters / 2;
     const centerZ = gridLengthMeters / 2;
+
+    if (ambientLightRef.current) {
+      sceneRef.current.remove(ambientLightRef.current);
+    }
+    if (sunLightRef.current) {
+      if (sunLightRef.current.shadow?.map) {
+        sunLightRef.current.shadow.map.dispose();
+      }
+      sceneRef.current.remove(sunLightRef.current);
+    }
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     sceneRef.current.add(ambientLight);

@@ -36,8 +36,8 @@ const Drawing3DPreview: React.FC<Drawing3DPreviewProps> = ({
   const initScene = useCallback(() => {
     if (!containerRef.current) return;
 
-    const width = containerRef.current.clientWidth;
-    const height = containerRef.current.clientHeight;
+    const width = 1280;
+    const height = 720;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x050810);
@@ -50,9 +50,12 @@ const Drawing3DPreview: React.FC<Drawing3DPreviewProps> = ({
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(1);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
+    renderer.domElement.style.objectFit = 'contain';
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -325,19 +328,7 @@ const Drawing3DPreview: React.FC<Drawing3DPreviewProps> = ({
   useEffect(() => {
     const cleanup = initScene();
 
-    const handleResize = () => {
-      if (!containerRef.current || !rendererRef.current || !cameraRef.current) return;
-      const width = containerRef.current.clientWidth;
-      const height = containerRef.current.clientHeight;
-      rendererRef.current.setSize(width, height);
-      cameraRef.current.aspect = width / height;
-      cameraRef.current.updateProjectionMatrix();
-    };
-
-    window.addEventListener('resize', handleResize);
-
     return () => {
-      window.removeEventListener('resize', handleResize);
       if (cleanup) cleanup();
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
